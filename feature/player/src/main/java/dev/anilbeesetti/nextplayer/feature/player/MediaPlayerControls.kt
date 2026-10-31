@@ -223,6 +223,10 @@ internal fun MediaPlayerControls(
                 },
                 onSelectSubtitleClick = { onAction(PlayerAction.SelectSubtitle) },
                 onSelectAudioClick = { onAction(PlayerAction.SelectAudio) },
+                loudnessNormalizationEnabled = state.playerPreferences.enableLoudnessNormalization,
+                onToggleLoudnessNormalization = {
+                    onAction(PlayerAction.ToggleLoudnessNormalization)
+                },
                 onSubtitleOptionEvent = {
                     onAction(PlayerAction.OnSubtitleOptionEvent(event = it))
                 },

@@ -173,31 +173,11 @@ fun BoxScope.PlaybackSpeedSelectorView(
                 }
             }
 
-            Row(
-                modifier = Modifier
-                    .clip(shape = RoundedCornerShape(4.dp))
-                    .toggleable(
-                        value = playbackParametersState.skipSilenceEnabled,
-                        onValueChange = {
-                            playbackParametersState.setIsSkipSilenceEnabled(enabled = it)
-                        },
-                    )
-                    .fillMaxWidth()
-                    .padding(8.dp)
-                    .semantics(mergeDescendants = true) {},
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.skip_silence),
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(weight = 1f),
-                )
-                NextSwitch(
-                    checked = playbackParametersState.skipSilenceEnabled,
-                    onCheckedChange = null,
-                )
-            }
+            OverlaySwitchRow(
+                text = stringResource(R.string.skip_silence),
+                checked = playbackParametersState.skipSilenceEnabled,
+                onCheckedChange = { playbackParametersState.setIsSkipSilenceEnabled(enabled = it) },
+            )
         }
     }
 }

@@ -86,6 +86,8 @@ class PlayerViewModel(
 
             is PlayerAction.ToggleTimeDisplay -> toggleTimeDisplay()
 
+            is PlayerAction.ToggleLoudnessNormalization -> toggleLoudnessNormalization()
+
             is PlayerAction.OnVideoZoomEvent -> onVideoZoomEvent(action.event)
 
             is PlayerAction.OnSubtitleOptionEvent -> onSubtitleOptionEvent(action.event)
@@ -127,6 +129,14 @@ class PlayerViewModel(
         viewModelScope.launch {
             preferencesRepository.updatePlayerPreferences {
                 it.copy(showRemainingTime = !it.showRemainingTime)
+            }
+        }
+    }
+
+    private fun toggleLoudnessNormalization() {
+        viewModelScope.launch {
+            preferencesRepository.updatePlayerPreferences {
+                it.copy(enableLoudnessNormalization = !it.enableLoudnessNormalization)
             }
         }
     }
@@ -203,6 +213,7 @@ sealed interface PlayerAction {
     data class UpdatePlayerBrightness(val value: Float) : PlayerAction
     data class SetLoopMode(val loopMode: LoopMode) : PlayerAction
     data object ToggleTimeDisplay : PlayerAction
+    data object ToggleLoudnessNormalization : PlayerAction
     data class OnVideoZoomEvent(val event: VideoZoomEvent) : PlayerAction
     data class OnSubtitleOptionEvent(val event: SubtitleOptionsEvent) : PlayerAction
 }

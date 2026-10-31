@@ -27,6 +27,8 @@ fun BoxScope.OverlayShowView(
     onAudioDecoderModeSelected: (DecoderMode) -> Unit = {},
     onSelectSubtitleClick: () -> Unit = {},
     onSelectAudioClick: () -> Unit = {},
+    loudnessNormalizationEnabled: Boolean = false,
+    onToggleLoudnessNormalization: () -> Unit = {},
     onSubtitleOptionEvent: (SubtitleOptionsEvent) -> Unit = {},
     onVideoContentScaleChanged: (VideoContentScale) -> Unit = {},
 ) {
@@ -46,6 +48,8 @@ fun BoxScope.OverlayShowView(
         show = overlayView == OverlayView.AUDIO_SELECTOR,
         player = player,
         onSelectAudioClick = onSelectAudioClick,
+        loudnessNormalizationEnabled = loudnessNormalizationEnabled,
+        onToggleLoudnessNormalization = onToggleLoudnessNormalization,
         onDismiss = onDismiss,
     )
 

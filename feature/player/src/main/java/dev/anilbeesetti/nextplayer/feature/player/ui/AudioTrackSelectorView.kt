@@ -41,6 +41,8 @@ fun BoxScope.AudioTrackSelectorView(
     show: Boolean,
     player: Player,
     onSelectAudioClick: () -> Unit,
+    loudnessNormalizationEnabled: Boolean,
+    onToggleLoudnessNormalization: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val audioTracksState = rememberTracksState(
@@ -101,6 +103,12 @@ fun BoxScope.AudioTrackSelectorView(
                     onDismiss()
                 },
             ) { Text(text = stringResource(R.string.open_audio)) }
+            Spacer(modifier = Modifier.size(8.dp))
+            OverlaySwitchRow(
+                text = stringResource(R.string.loudness_normalization),
+                checked = loudnessNormalizationEnabled,
+                onCheckedChange = { onToggleLoudnessNormalization() },
+            )
         }
     }
 }
