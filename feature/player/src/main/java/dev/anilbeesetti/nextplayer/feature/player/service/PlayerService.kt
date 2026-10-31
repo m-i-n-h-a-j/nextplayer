@@ -58,6 +58,7 @@ import dev.anilbeesetti.nextplayer.core.model.Resume
 import dev.anilbeesetti.nextplayer.core.ui.R as coreUiR
 import dev.anilbeesetti.nextplayer.feature.player.PlayerActivity
 import dev.anilbeesetti.nextplayer.feature.player.R
+import dev.anilbeesetti.nextplayer.feature.player.audio.LoudnessAnalyzer
 import dev.anilbeesetti.nextplayer.feature.player.audio.LoudnessAudioProcessor
 import dev.anilbeesetti.nextplayer.feature.player.audio.LoudnessSettings
 import dev.anilbeesetti.nextplayer.feature.player.extensions.addAdditionalSubtitleConfiguration
@@ -135,6 +136,14 @@ class PlayerService : MediaSessionService() {
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var currentVolumeGain: Int = 0
     private val loudnessAudioProcessor = LoudnessAudioProcessor()
+    private val loudnessAnalyzer by lazy {
+        LoudnessAnalyzer(
+            context = applicationContext,
+            createMediaSourceFactory = ::createMediaSourceFactory,
+        )
+    }
+    private var loudnessAnalysisJob: Job? = null
+    private var analyzedAudioTrack: Pair<String, String?>? = null
 
     private lateinit var decoderManager: DecoderManager
     private lateinit var trackSelector: DefaultTrackSelector
@@ -301,6 +310,7 @@ class PlayerService : MediaSessionService() {
             serviceScope.launch {
                 mediaSession?.player?.currentTracks?.let(block = ::handleUnsupportedTracks)
             }
+            analyzeCurrentAudioTrack()
             if (!isMediaItemReady && tracks.groups.isNotEmpty()) {
                 isMediaItemReady = true
 
@@ -950,14 +960,7 @@ class PlayerService : MediaSessionService() {
         val player = ExoPlayer.Builder(applicationContext)
             .setRenderersFactory(renderersFactory)
             .setTrackSelector(trackSelector)
-            .setMediaSourceFactory(
-                ExternalAudioMediaSourceFactory(
-                    ApiMediaSourceFactory(
-                        applicationContext,
-                        dataSourceFactory,
-                    ),
-                ),
-            )
+            .setMediaSourceFactory(createMediaSourceFactory())
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -1014,6 +1017,13 @@ class PlayerService : MediaSessionService() {
         }
     }
 
+    private fun createMediaSourceFactory() = ExternalAudioMediaSourceFactory(
+        ApiMediaSourceFactory(
+            applicationContext,
+            dataSourceFactory,
+        ),
+    )
+
     private fun observeLoudnessPreferences() {
         serviceScope.launch {
             preferencesRepository.playerPreferences.collect { preferences ->
@@ -1022,9 +1032,49 @@ class PlayerService : MediaSessionService() {
                     targetLufs = preferences.loudnessTargetLufs,
                     loudnessRangeLu = preferences.loudnessRangeLu,
                     peakLimitDb = preferences.loudnessPeakLimitDb,
+                    measuredProgramLufs = loudnessAudioProcessor.settings.measuredProgramLufs,
                 )
+                analyzeCurrentAudioTrack()
             }
         }
+    }
+
+    /**
+     * Starts the first pass of normalization for the playing track. Until it finishes, the second
+     * pass runs on its own estimate. Network media is skipped, as it would be downloaded in full.
+     */
+    private fun analyzeCurrentAudioTrack() {
+        val player = mediaSession?.player ?: return
+        val mediaItem = player.currentMediaItem
+        val audioFormatId = player.currentTracks.groups
+            .firstOrNull { it.type == C.TRACK_TYPE_AUDIO && it.isSelected }
+            ?.mediaTrackGroup?.getFormat(0)?.id
+        val audioTrack = mediaItem?.takeIf {
+            playerPreferences.enableLoudnessNormalization && !it.isNetworkMediaItem()
+        }?.let { it.mediaId to audioFormatId }
+        if (audioTrack == analyzedAudioTrack) return
+
+        analyzedAudioTrack = audioTrack
+        loudnessAnalysisJob?.cancel()
+        setMeasuredProgramLufs(value = null)
+        if (audioTrack == null || mediaItem == null) return
+
+        loudnessAnalysisJob = serviceScope.launch {
+            val programLufs = loudnessAnalyzer.measureProgramLufs(
+                mediaItem = mediaItem,
+                audioFormatId = audioFormatId,
+            )
+            Logger.logInfo(
+                tag = LOUDNESS_LOG_TAG,
+                message = "Measured ${mediaItem.mediaId} at $programLufs LUFS",
+            )
+            setMeasuredProgramLufs(value = programLufs)
+        }
+    }
+
+    private fun setMeasuredProgramLufs(value: Double?) {
+        loudnessAudioProcessor.settings =
+            loudnessAudioProcessor.settings.copy(measuredProgramLufs = value)
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -1416,6 +1466,7 @@ private val DecoderTrackType.mediaTrackType: Int
     }
 
 private const val DECODER_LOG_TAG = "Decoder"
+private const val LOUDNESS_LOG_TAG = "Loudness"
 
 @get:UnstableApi
 @set:UnstableApi
