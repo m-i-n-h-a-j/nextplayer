@@ -2,6 +2,7 @@ package dev.anilbeesetti.nextplayer.feature.player.service
 
 import android.app.PendingIntent
 import android.content.ContentResolver
+import android.content.Context
 import android.content.Intent
 import android.media.audiofx.LoudnessEnhancer
 import android.net.Uri
@@ -26,6 +27,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.session.CommandButton
 import androidx.media3.session.CommandButton.ICON_UNDEFINED
@@ -55,6 +58,8 @@ import dev.anilbeesetti.nextplayer.core.model.Resume
 import dev.anilbeesetti.nextplayer.core.ui.R as coreUiR
 import dev.anilbeesetti.nextplayer.feature.player.PlayerActivity
 import dev.anilbeesetti.nextplayer.feature.player.R
+import dev.anilbeesetti.nextplayer.feature.player.audio.LoudnessAudioProcessor
+import dev.anilbeesetti.nextplayer.feature.player.audio.LoudnessSettings
 import dev.anilbeesetti.nextplayer.feature.player.extensions.addAdditionalSubtitleConfiguration
 import dev.anilbeesetti.nextplayer.feature.player.extensions.audioDecoderMode
 import dev.anilbeesetti.nextplayer.feature.player.extensions.audioTrackIndex
@@ -129,6 +134,7 @@ class PlayerService : MediaSessionService() {
 
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var currentVolumeGain: Int = 0
+    private val loudnessAudioProcessor = LoudnessAudioProcessor()
 
     private lateinit var decoderManager: DecoderManager
     private lateinit var trackSelector: DefaultTrackSelector
@@ -919,9 +925,18 @@ class PlayerService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         decoderManager = DecoderManager()
-        val renderersFactory = NextRenderersFactory(
-            context = applicationContext,
-        ).setDecoderManager(decoderManager = decoderManager)
+        val renderersFactory = object : NextRenderersFactory(context = applicationContext) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioOutputPlaybackParams: Boolean,
+            ): AudioSink = DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+                .setAudioProcessors(arrayOf(loudnessAudioProcessor))
+                .build()
+        }.setDecoderManager(decoderManager = decoderManager)
+        observeLoudnessPreferences()
 
         trackSelector = DefaultTrackSelector(applicationContext).apply {
             setParameters(
@@ -996,6 +1011,19 @@ class PlayerService : MediaSessionService() {
             }.build()
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    private fun observeLoudnessPreferences() {
+        serviceScope.launch {
+            preferencesRepository.playerPreferences.collect { preferences ->
+                loudnessAudioProcessor.settings = LoudnessSettings(
+                    enabled = preferences.enableLoudnessNormalization,
+                    targetLufs = preferences.loudnessTargetLufs,
+                    loudnessRangeLu = preferences.loudnessRangeLu,
+                    peakLimitDb = preferences.loudnessPeakLimitDb,
+                )
+            }
         }
     }
 
