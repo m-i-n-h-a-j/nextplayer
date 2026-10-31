@@ -208,6 +208,17 @@
     <string name="properties">Properties</string>
     <string name="volume_boost">Volume boost</string>
     <string name="volume_boost_desc">Boost audio volume up to 200%</string>
+    <string name="loudness_normalization">Loudness normalization</string>
+    <string name="loudness_normalization_desc">Keep movie audio at a steady volume while playing</string>
+    <string name="loudness_target">Target loudness</string>
+    <string name="loudness_target_value">%1$d LUFS</string>
+    <string name="loudness_range">Loudness range</string>
+    <string name="loudness_range_value">%1$d LU (lower evens out quiet and loud scenes more)</string>
+    <string name="loudness_peak_limit">Peak limit</string>
+    <string name="loudness_peak_limit_value">%1$.1f dB</string>
+    <string name="reset_loudness_target">Reset target loudness</string>
+    <string name="reset_loudness_range">Reset loudness range</string>
+    <string name="reset_loudness_peak_limit">Reset peak limit</string>
     <string name="open_audio">Open local audio</string>
     <string name="error_opening_audio">Can’t open this audio file</string>
     <string name="open_subtitle">Open local subtitle</string>

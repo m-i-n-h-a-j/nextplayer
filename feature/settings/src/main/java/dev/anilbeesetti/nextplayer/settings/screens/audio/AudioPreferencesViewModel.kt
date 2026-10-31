@@ -54,6 +54,15 @@ class AudioPreferencesViewModel(
             is AudioPreferencesUiEvent.ToggleRequireAudioFocus -> toggleRequireAudioFocus()
 
             is AudioPreferencesUiEvent.ToggleVolumeBoost -> toggleVolumeBoost()
+
+            is AudioPreferencesUiEvent.ToggleLoudnessNormalization -> toggleLoudnessNormalization()
+
+            is AudioPreferencesUiEvent.UpdateLoudnessTarget -> updateLoudnessTarget(action.value)
+
+            is AudioPreferencesUiEvent.UpdateLoudnessRange -> updateLoudnessRange(action.value)
+
+            is AudioPreferencesUiEvent.UpdateLoudnessPeakLimit ->
+                updateLoudnessPeakLimit(action.value)
         }
     }
 
@@ -100,6 +109,32 @@ class AudioPreferencesViewModel(
             }
         }
     }
+
+    private fun toggleLoudnessNormalization() {
+        viewModelScope.launch {
+            preferencesRepository.updatePlayerPreferences {
+                it.copy(enableLoudnessNormalization = !it.enableLoudnessNormalization)
+            }
+        }
+    }
+
+    private fun updateLoudnessTarget(value: Float) {
+        viewModelScope.launch {
+            preferencesRepository.updatePlayerPreferences { it.copy(loudnessTargetLufs = value) }
+        }
+    }
+
+    private fun updateLoudnessRange(value: Float) {
+        viewModelScope.launch {
+            preferencesRepository.updatePlayerPreferences { it.copy(loudnessRangeLu = value) }
+        }
+    }
+
+    private fun updateLoudnessPeakLimit(value: Float) {
+        viewModelScope.launch {
+            preferencesRepository.updatePlayerPreferences { it.copy(loudnessPeakLimitDb = value) }
+        }
+    }
 }
 
 @Stable
@@ -121,4 +156,8 @@ sealed interface AudioPreferencesUiEvent {
     data object ToggleShowSystemVolumePanel : AudioPreferencesUiEvent
     data object ToggleRequireAudioFocus : AudioPreferencesUiEvent
     data object ToggleVolumeBoost : AudioPreferencesUiEvent
+    data object ToggleLoudnessNormalization : AudioPreferencesUiEvent
+    data class UpdateLoudnessTarget(val value: Float) : AudioPreferencesUiEvent
+    data class UpdateLoudnessRange(val value: Float) : AudioPreferencesUiEvent
+    data class UpdateLoudnessPeakLimit(val value: Float) : AudioPreferencesUiEvent
 }

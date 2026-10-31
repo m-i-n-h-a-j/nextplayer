@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItemDefaults
@@ -22,10 +23,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.anilbeesetti.nextplayer.core.model.PlayerPreferences
 import dev.anilbeesetti.nextplayer.core.ui.R
 import dev.anilbeesetti.nextplayer.core.ui.components.ClickablePreferenceItem
 import dev.anilbeesetti.nextplayer.core.ui.components.ListSectionTitle
 import dev.anilbeesetti.nextplayer.core.ui.components.NextTopAppBar
+import dev.anilbeesetti.nextplayer.core.ui.components.PreferenceSlider
 import dev.anilbeesetti.nextplayer.core.ui.components.PreferenceSwitch
 import dev.anilbeesetti.nextplayer.core.ui.components.RadioTextButton
 import dev.anilbeesetti.nextplayer.core.ui.components.rememberTvListFocusRequester
@@ -35,6 +38,7 @@ import dev.anilbeesetti.nextplayer.core.ui.designsystem.NextIcons
 import dev.anilbeesetti.nextplayer.core.ui.theme.NextPlayerTheme
 import dev.anilbeesetti.nextplayer.settings.composables.OptionsDialog
 import dev.anilbeesetti.nextplayer.settings.utils.LocalesHelper
+import kotlin.math.roundToInt
 
 @Composable
 fun AudioPreferencesScreen(viewModel: AudioPreferencesViewModel) {
@@ -147,6 +151,66 @@ private fun AudioPreferencesScreenContent(
                     isLastItem = true,
                 )
             }
+
+            ListSectionTitle(text = stringResource(id = R.string.loudness_normalization))
+            Column(
+                verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+            ) {
+                val enabled = state.preferences.enableLoudnessNormalization
+                PreferenceSwitch(
+                    title = stringResource(id = R.string.loudness_normalization),
+                    description = stringResource(id = R.string.loudness_normalization_desc),
+                    icon = NextIcons.VolumeUp,
+                    isChecked = enabled,
+                    onClick = { onAction(AudioPreferencesUiEvent.ToggleLoudnessNormalization) },
+                    isFirstItem = true,
+                )
+                LoudnessSlider(
+                    title = stringResource(id = R.string.loudness_target),
+                    description = stringResource(
+                        id = R.string.loudness_target_value,
+                        state.preferences.loudnessTargetLufs.roundToInt(),
+                    ),
+                    resetDescription = stringResource(id = R.string.reset_loudness_target),
+                    enabled = enabled,
+                    value = state.preferences.loudnessTargetLufs,
+                    valueRange = -30f..-5f,
+                    steps = 24,
+                    defaultValue = PlayerPreferences.DEFAULT_LOUDNESS_TARGET_LUFS,
+                    onValueChange = { onAction(AudioPreferencesUiEvent.UpdateLoudnessTarget(it)) },
+                )
+                LoudnessSlider(
+                    title = stringResource(id = R.string.loudness_range),
+                    description = stringResource(
+                        id = R.string.loudness_range_value,
+                        state.preferences.loudnessRangeLu.roundToInt(),
+                    ),
+                    resetDescription = stringResource(id = R.string.reset_loudness_range),
+                    enabled = enabled,
+                    value = state.preferences.loudnessRangeLu,
+                    valueRange = 1f..20f,
+                    steps = 18,
+                    defaultValue = PlayerPreferences.DEFAULT_LOUDNESS_RANGE_LU,
+                    onValueChange = { onAction(AudioPreferencesUiEvent.UpdateLoudnessRange(it)) },
+                )
+                LoudnessSlider(
+                    title = stringResource(id = R.string.loudness_peak_limit),
+                    description = stringResource(
+                        id = R.string.loudness_peak_limit_value,
+                        state.preferences.loudnessPeakLimitDb,
+                    ),
+                    resetDescription = stringResource(id = R.string.reset_loudness_peak_limit),
+                    enabled = enabled,
+                    value = state.preferences.loudnessPeakLimitDb,
+                    valueRange = -6f..0f,
+                    steps = 11,
+                    defaultValue = PlayerPreferences.DEFAULT_LOUDNESS_PEAK_LIMIT_DB,
+                    onValueChange = {
+                        onAction(AudioPreferencesUiEvent.UpdateLoudnessPeakLimit(it))
+                    },
+                    isLastItem = true,
+                )
+            }
         }
 
         state.showDialog?.let { showDialog ->
@@ -173,6 +237,43 @@ private fun AudioPreferencesScreenContent(
             }
         }
     }
+}
+
+@Composable
+private fun LoudnessSlider(
+    title: String,
+    description: String,
+    resetDescription: String,
+    enabled: Boolean,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    defaultValue: Float,
+    onValueChange: (Float) -> Unit,
+    isLastItem: Boolean = false,
+) {
+    PreferenceSlider(
+        title = title,
+        description = description,
+        enabled = enabled,
+        value = value,
+        valueRange = valueRange,
+        steps = steps,
+        onValueChange = onValueChange,
+        onReset = { onValueChange(defaultValue) },
+        isLastItem = isLastItem,
+        trailingContent = {
+            FilledIconButton(
+                onClick = { onValueChange(defaultValue) },
+                enabled = enabled,
+            ) {
+                Icon(
+                    imageVector = NextIcons.History,
+                    contentDescription = resetDescription,
+                )
+            }
+        },
+    )
 }
 
 @PreviewLightDark

@@ -50,6 +50,10 @@ data class PlayerPreferences(
     val requireAudioFocus: Boolean = true,
     val showSystemVolumePanel: Boolean = true,
     val enableVolumeBoost: Boolean = false,
+    val enableLoudnessNormalization: Boolean = false,
+    val loudnessTargetLufs: Float = DEFAULT_LOUDNESS_TARGET_LUFS,
+    val loudnessRangeLu: Float = DEFAULT_LOUDNESS_RANGE_LU,
+    val loudnessPeakLimitDb: Float = DEFAULT_LOUDNESS_PEAK_LIMIT_DB,
 
     // Subtitle Preferences
     val useSystemCaptionStyle: Boolean = false,
@@ -69,5 +73,8 @@ data class PlayerPreferences(
         const val DEFAULT_BRIGHTNESS_GESTURE_SENSITIVITY = 0.50f
         const val DEFAULT_SUBTITLE_TEXT_SIZE = 20
         const val DEFAULT_CONTROLLER_AUTO_HIDE_TIMEOUT = 4
+        const val DEFAULT_LOUDNESS_TARGET_LUFS = -14f
+        const val DEFAULT_LOUDNESS_RANGE_LU = 7f
+        const val DEFAULT_LOUDNESS_PEAK_LIMIT_DB = -1f
     }
 }
