@@ -14,11 +14,7 @@ import kotlin.math.tan
  * While playing, [programLufs] is a running estimate that slowly forgets old audio, until
  * [knownProgramLufs] replaces it with a measurement of the whole track.
  */
-internal class LoudnessMeter(
-    sampleRate: Int,
-    private val channelCount: Int,
-    private val programMemoryBlocks: Int = RUNNING_MEMORY_BLOCKS,
-) {
+internal class LoudnessMeter(sampleRate: Int, private val channelCount: Int) {
     private val channelWeights = DoubleArray(channelCount) {
         channelWeight(
             it,
@@ -36,6 +32,10 @@ internal class LoudnessMeter(
 
     private var programEnergy = 0.0
     private var programBlocks = 0
+
+    /** Mean square of the last completed block, K-weighted and before any gating. */
+    var lastBlockEnergy = 0.0
+        private set
 
     /** Loudness of the last 3 active seconds, or negative infinity until enough was measured. */
     var shortTermLufs = Double.NEGATIVE_INFINITY
@@ -72,6 +72,7 @@ internal class LoudnessMeter(
 
     private fun finishBlock() {
         val energy = blockEnergy / framesPerBlock
+        lastBlockEnergy = energy
         blockEnergy = 0.0
         blockFrames = 0
         if (isPause(lufs = energyToLufs(energy = energy))) return
@@ -86,36 +87,35 @@ internal class LoudnessMeter(
         for (block in 0 until filledBlocks) energySum += blockEnergies[block]
         val shortTermEnergy = energySum / filledBlocks
         shortTermLufs = energyToLufs(energy = shortTermEnergy)
-        programBlocks = (programBlocks + 1).coerceAtMost(programMemoryBlocks)
+        programBlocks = (programBlocks + 1).coerceAtMost(PROGRAM_MEMORY_BLOCKS)
         programEnergy += (shortTermEnergy - programEnergy) / programBlocks
     }
 
     private fun isPause(lufs: Double): Boolean =
         lufs <= ABSOLUTE_GATE_LUFS || lufs <= programLufs + RELATIVE_GATE_LU
 
-    private fun energyToLufs(energy: Double): Double = if (energy > 0.0) {
-        LUFS_OFFSET + 10.0 * log10(energy)
-    } else {
-        Double.NEGATIVE_INFINITY
-    }
-
     companion object {
-        /** Makes [programLufs] cover everything measured, for analyzing a whole track. */
-        const val WHOLE_TRACK = Int.MAX_VALUE
+        const val BLOCKS_PER_SECOND = 10
+        const val ABSOLUTE_GATE_LUFS = -70.0
 
-        private const val BLOCKS_PER_SECOND = 10
         private const val SHORT_TERM_BLOCKS = 30
         private const val MIN_BLOCKS = 4
-        private const val RUNNING_MEMORY_BLOCKS = 5 * 60 * BLOCKS_PER_SECOND
+        private const val PROGRAM_MEMORY_BLOCKS = 5 * 60 * BLOCKS_PER_SECOND
 
         private const val LUFS_OFFSET = -0.691
-        private const val ABSOLUTE_GATE_LUFS = -70.0
         private const val RELATIVE_GATE_LU = -20.0
 
         private const val FIRST_SURROUND_CHANNEL = 4
         private const val LFE_CHANNEL = 3
         private const val MIN_SURROUND_CHANNELS = 6
         private const val SURROUND_WEIGHT = 1.41
+
+        /** Converts a K-weighted mean square to LUFS, or negative infinity for silence. */
+        fun energyToLufs(energy: Double): Double = if (energy > 0.0) {
+            LUFS_OFFSET + 10.0 * log10(energy)
+        } else {
+            Double.NEGATIVE_INFINITY
+        }
 
         /** BS.1770 channel weights, using Android's order: FL, FR, FC, LFE, then surrounds. */
         private fun channelWeight(channel: Int, channelCount: Int): Double = when {

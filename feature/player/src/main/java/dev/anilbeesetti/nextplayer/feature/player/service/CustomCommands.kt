@@ -9,6 +9,8 @@ import dev.anilbeesetti.nextplayer.feature.player.model.DecoderRecoveryState
 import dev.anilbeesetti.nextplayer.feature.player.model.DecoderRecoveryStatus
 import dev.anilbeesetti.nextplayer.feature.player.model.DecoderServiceState
 import dev.anilbeesetti.nextplayer.feature.player.model.DecoderTrackType
+import dev.anilbeesetti.nextplayer.feature.player.model.LoudnessAnalysis
+import dev.anilbeesetti.nextplayer.feature.player.model.LoudnessAnalysisStatus
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
 import kotlinx.coroutines.guava.await
 
@@ -63,6 +65,9 @@ enum class CustomCommands(val customAction: String) {
         const val DECODER_RECOVERY_STATUS_KEY = "decoder_recovery_status"
         const val DECODER_RECOVERY_TRACK_TYPE_KEY = "decoder_recovery_track_type"
         const val UNSUPPORTED_DECODER_MODE_KEY = "unsupported_decoder_mode"
+        const val LOUDNESS_ANALYSIS_STATUS_KEY = "loudness_analysis_status"
+        const val LOUDNESS_ANALYSIS_PROGRESS_KEY = "loudness_analysis_progress"
+        const val LOUDNESS_PROGRAM_LUFS_KEY = "loudness_program_lufs"
     }
 }
 
@@ -272,6 +277,38 @@ suspend fun MediaController.tryDecoderFallback(): Boolean {
         Bundle.EMPTY,
     ).await()
     return result.resultCode == SessionResult.RESULT_SUCCESS
+}
+
+internal fun Bundle.putLoudnessAnalysis(analysis: LoudnessAnalysis) {
+    putString(
+        CustomCommands.LOUDNESS_ANALYSIS_STATUS_KEY,
+        analysis.status.name,
+    )
+    putFloat(
+        CustomCommands.LOUDNESS_ANALYSIS_PROGRESS_KEY,
+        analysis.progress ?: Float.NaN,
+    )
+    putDouble(
+        CustomCommands.LOUDNESS_PROGRAM_LUFS_KEY,
+        analysis.programLufs ?: Double.NaN,
+    )
+}
+
+internal fun Bundle.loudnessAnalysis(): LoudnessAnalysis {
+    val status = getString(CustomCommands.LOUDNESS_ANALYSIS_STATUS_KEY)
+        ?.let { value -> LoudnessAnalysisStatus.entries.find { it.name == value } }
+        ?: LoudnessAnalysisStatus.NONE
+    return LoudnessAnalysis(
+        status = status,
+        progress = getFloat(
+            CustomCommands.LOUDNESS_ANALYSIS_PROGRESS_KEY,
+            Float.NaN,
+        ).takeUnless { it.isNaN() },
+        programLufs = getDouble(
+            CustomCommands.LOUDNESS_PROGRAM_LUFS_KEY,
+            Double.NaN,
+        ).takeUnless { it.isNaN() },
+    )
 }
 
 internal fun Bundle.decoderMode(key: String): DecoderMode? {

@@ -12,6 +12,7 @@ import androidx.core.net.toUri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.BundleListRetriever
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
@@ -52,6 +53,7 @@ import dev.anilbeesetti.nextplayer.core.data.repository.PreferencesRepository
 import dev.anilbeesetti.nextplayer.core.media.network.NetworkUri
 import dev.anilbeesetti.nextplayer.core.media.network.datasource.NextDataSourceFactory
 import dev.anilbeesetti.nextplayer.core.model.LoopMode
+import dev.anilbeesetti.nextplayer.core.model.LoudnessNormalizationMode
 import dev.anilbeesetti.nextplayer.core.model.PlayerPreferences
 import dev.anilbeesetti.nextplayer.core.model.Resume
 import dev.anilbeesetti.nextplayer.core.ui.R as coreUiR
@@ -79,6 +81,8 @@ import dev.anilbeesetti.nextplayer.feature.player.extensions.videoDecoderMode
 import dev.anilbeesetti.nextplayer.feature.player.extensions.videoZoom
 import dev.anilbeesetti.nextplayer.feature.player.extensions.withExternalAudio
 import dev.anilbeesetti.nextplayer.feature.player.model.DecoderTrackType
+import dev.anilbeesetti.nextplayer.feature.player.model.LoudnessAnalysis
+import dev.anilbeesetti.nextplayer.feature.player.model.LoudnessAnalysisStatus
 import dev.anilbeesetti.nextplayer.feature.player.utils.hasApiPosition
 import dev.anilbeesetti.nextplayer.feature.player.utils.isExplicitPlaylistItem
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderManager
@@ -88,6 +92,7 @@ import io.github.anilbeesetti.nextlib.media3ext.renderer.subtitleDelayMillisecon
 import io.github.anilbeesetti.nextlib.media3ext.renderer.subtitleSpeed
 import io.github.anilbeesetti.nextlib.mediainfo.MediaInfoBuilder
 import java.io.File
+import kotlin.math.floor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -97,6 +102,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.guava.future
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
@@ -144,7 +151,8 @@ class PlayerService : MediaSessionService() {
         )
     }
     private var loudnessAnalysisJob: Job? = null
-    private var analyzedAudioTrack: Pair<String, String?>? = null
+    private var analyzedAudioTrack: AnalyzedAudioTrack? = null
+    private var loudnessAnalysis = LoudnessAnalysis()
 
     private lateinit var decoderManager: DecoderManager
     private lateinit var trackSelector: DefaultTrackSelector
@@ -1027,55 +1035,127 @@ class PlayerService : MediaSessionService() {
 
     private fun observeLoudnessPreferences() {
         serviceScope.launch {
-            preferencesRepository.playerPreferences.collect { preferences ->
-                loudnessAudioProcessor.settings = LoudnessSettings(
-                    enabled = preferences.enableLoudnessNormalization,
-                    targetLufs = preferences.loudnessTargetLufs,
-                    loudnessRangeLu = preferences.loudnessRangeLu,
-                    peakLimitDb = preferences.loudnessPeakLimitDb,
-                    measuredProgramLufs = loudnessAudioProcessor.settings.measuredProgramLufs,
-                )
-                analyzeCurrentAudioTrack()
-            }
+            preferencesRepository.playerPreferences
+                .map { preferences ->
+                    LoudnessSettings(
+                        enabled = preferences.enableLoudnessNormalization,
+                        targetLufs = preferences.loudnessTargetLufs,
+                        loudnessRangeLu = preferences.loudnessRangeLu,
+                        peakLimitDb = preferences.loudnessPeakLimitDb,
+                    ) to preferences.loudnessNormalizationMode
+                }
+                .distinctUntilChanged()
+                .collect { (settings, _) ->
+                    loudnessAudioProcessor.settings = settings.copy(
+                        measuredProgramLufs = loudnessAudioProcessor.settings.measuredProgramLufs,
+                    )
+                    analyzeCurrentAudioTrack()
+                }
         }
     }
 
     /**
-     * Starts the first pass of normalization for the playing track. Until it finishes, the second
-     * pass runs on its own estimate. Network media is skipped, as it would be downloaded in full.
+     * Starts the first pass of two-pass normalization for the playing track. Until it finishes,
+     * the normalizer runs single pass. Network media is skipped, as it would be downloaded in full.
      */
     private fun analyzeCurrentAudioTrack() {
         val player = mediaSession?.player ?: return
         val mediaItem = player.currentMediaItem
-        val audioFormatId = player.currentTracks.groups
-            .firstOrNull { it.type == C.TRACK_TYPE_AUDIO && it.isSelected }
-            ?.mediaTrackGroup?.getFormat(0)?.id
-        val audioTrack = mediaItem?.takeIf {
-            playerPreferences.enableLoudnessNormalization && !it.isNetworkMediaItem()
-        }?.let { it.mediaId to audioFormatId }
+        val tracks = player.currentTracks
+        val isTwoPass = playerPreferences.enableLoudnessNormalization &&
+            playerPreferences.loudnessNormalizationMode == LoudnessNormalizationMode.TWO_PASS
+        // Tracks are briefly empty while an item is prepared again, which must not restart it.
+        if (isTwoPass && tracks.isEmpty && mediaItem?.mediaId == analyzedAudioTrack?.mediaId) return
+
+        val audioFormat = tracks.selectedAudioFormat()
+        val audioTrack = if (isTwoPass && mediaItem != null && audioFormat != null) {
+            AnalyzedAudioTrack(
+                mediaId = mediaItem.mediaId,
+                format = audioFormat,
+            )
+        } else {
+            null
+        }
         if (audioTrack == analyzedAudioTrack) return
 
         analyzedAudioTrack = audioTrack
         loudnessAnalysisJob?.cancel()
         setMeasuredProgramLufs(value = null)
-        if (audioTrack == null || mediaItem == null) return
+        when {
+            mediaItem == null || audioFormat == null || audioTrack == null ->
+                publishLoudnessAnalysis(analysis = LoudnessAnalysis())
 
-        loudnessAnalysisJob = serviceScope.launch {
-            val programLufs = loudnessAnalyzer.measureProgramLufs(
-                mediaItem = mediaItem,
-                audioFormatId = audioFormatId,
+            mediaItem.isNetworkMediaItem() -> publishLoudnessAnalysis(
+                analysis = LoudnessAnalysis(status = LoudnessAnalysisStatus.UNAVAILABLE_FOR_STREAM),
             )
-            Logger.logInfo(
-                tag = LOUDNESS_LOG_TAG,
-                message = "Measured ${mediaItem.mediaId} at $programLufs LUFS",
-            )
-            setMeasuredProgramLufs(value = programLufs)
+
+            else -> loudnessAnalysisJob = serviceScope.launch {
+                measureLoudness(
+                    mediaItem = mediaItem,
+                    audioFormat = audioFormat,
+                )
+            }
         }
+    }
+
+    private suspend fun measureLoudness(mediaItem: MediaItem, audioFormat: Format) {
+        val programLufs = loudnessAnalyzer.cachedProgramLufs(
+            mediaItem = mediaItem,
+            audioFormat = audioFormat,
+        ) ?: run {
+            publishLoudnessAnalysis(
+                analysis = LoudnessAnalysis(status = LoudnessAnalysisStatus.ANALYZING),
+            )
+            loudnessAnalyzer.measureProgramLufs(
+                mediaItem = mediaItem,
+                audioFormat = audioFormat,
+                onProgress = { progress ->
+                    publishLoudnessAnalysis(
+                        analysis = LoudnessAnalysis(
+                            status = LoudnessAnalysisStatus.ANALYZING,
+                            // Whole percents, so the controller only hears about visible changes.
+                            progress = progress?.let { floor(it * 100f) / 100f },
+                        ),
+                    )
+                },
+            )
+        }
+        Logger.logInfo(
+            tag = LOUDNESS_LOG_TAG,
+            message = "Measured ${mediaItem.mediaId} at $programLufs LUFS",
+        )
+        setMeasuredProgramLufs(value = programLufs)
+        publishLoudnessAnalysis(
+            analysis = if (programLufs != null) {
+                LoudnessAnalysis(
+                    status = LoudnessAnalysisStatus.MEASURED,
+                    programLufs = programLufs,
+                )
+            } else {
+                LoudnessAnalysis(status = LoudnessAnalysisStatus.FAILED)
+            },
+        )
     }
 
     private fun setMeasuredProgramLufs(value: Double?) {
         loudnessAudioProcessor.settings =
             loudnessAudioProcessor.settings.copy(measuredProgramLufs = value)
+    }
+
+    private fun publishLoudnessAnalysis(analysis: LoudnessAnalysis) {
+        if (analysis == loudnessAnalysis) return
+        loudnessAnalysis = analysis
+        val session = mediaSession ?: return
+        session.sessionExtras = Bundle(session.sessionExtras).apply {
+            putLoudnessAnalysis(analysis = analysis)
+        }
+    }
+
+    private fun Tracks.selectedAudioFormat(): Format? {
+        val group = groups.firstOrNull { it.type == C.TRACK_TYPE_AUDIO && it.isSelected }
+            ?: return null
+        val trackIndex = (0 until group.length).firstOrNull(group::isTrackSelected) ?: return null
+        return group.getTrackFormat(trackIndex)
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -1466,6 +1546,9 @@ private val DecoderTrackType.mediaTrackType: Int
 
 private const val DECODER_LOG_TAG = "Decoder"
 private const val LOUDNESS_LOG_TAG = "Loudness"
+
+/** The track a first pass measures: a media item's audio track, by its format. */
+private data class AnalyzedAudioTrack(val mediaId: String, val format: Format)
 
 @get:UnstableApi
 @set:UnstableApi

@@ -19,7 +19,7 @@ internal class LoudnessNormalizer(sampleRate: Int, private val channelCount: Int
         sampleRate = sampleRate,
         channelCount = channelCount,
     )
-    private val framesPerBlock = sampleRate / BLOCKS_PER_SECOND
+    private val framesPerBlock = sampleRate / LoudnessMeter.BLOCKS_PER_SECOND
 
     /** Frames that a sample stays in the limiter's delay line before it is played. */
     val latencyFrames = sampleRate * LIMITER_LOOKAHEAD_MILLIS / 1000
@@ -156,7 +156,6 @@ internal class LoudnessNormalizer(sampleRate: Int, private val channelCount: Int
     private fun dbToLinear(db: Double): Float = 10.0.pow(db / 20.0).toFloat()
 
     private companion object {
-        const val BLOCKS_PER_SECOND = 10
         const val LIMITER_LOOKAHEAD_MILLIS = 5
         const val MAX_GAIN_DB = 24.0
         const val FULL_SCALE = 1f
