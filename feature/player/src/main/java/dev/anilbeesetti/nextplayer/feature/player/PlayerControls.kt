@@ -1,22 +1,35 @@
 package dev.anilbeesetti.nextplayer.feature.player
 
 import androidx.annotation.OptIn
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.compose.state.ProgressStateWithTickInterval
 import dev.anilbeesetti.nextplayer.core.model.ControlButtonsPosition
 import dev.anilbeesetti.nextplayer.core.model.PlayerPreferences
+import dev.anilbeesetti.nextplayer.core.ui.components.thenIf
 import dev.anilbeesetti.nextplayer.feature.player.extensions.nameRes
 import dev.anilbeesetti.nextplayer.feature.player.state.ChaptersState
 import dev.anilbeesetti.nextplayer.feature.player.state.ControlsVisibilityState
@@ -25,6 +38,8 @@ import dev.anilbeesetti.nextplayer.feature.player.state.VideoZoomAndContentScale
 import dev.anilbeesetti.nextplayer.feature.player.state.seekAmountFormatted
 import dev.anilbeesetti.nextplayer.feature.player.state.seekToPositionFormated
 import dev.anilbeesetti.nextplayer.feature.player.ui.InfoView
+import dev.anilbeesetti.nextplayer.feature.player.ui.LoudnessNotice
+import dev.anilbeesetti.nextplayer.feature.player.ui.LoudnessNoticeChip
 import dev.anilbeesetti.nextplayer.feature.player.ui.OverlayView
 import dev.anilbeesetti.nextplayer.feature.player.ui.controls.ControlsBottomView
 import dev.anilbeesetti.nextplayer.feature.player.ui.controls.ControlsMiddleView
@@ -38,6 +53,7 @@ fun PlayerControls(
     title: String,
     playerPreferences: PlayerPreferences,
     videoDecoderMode: DecoderMode?,
+    loudnessNotice: LoudnessNotice?,
     controlsVisibilityState: ControlsVisibilityState,
     seekGestureState: SeekGestureState,
     videoZoomAndContentScaleState: VideoZoomAndContentScaleState,
@@ -72,6 +88,10 @@ fun PlayerControls(
                     onBackClick = onBackClick,
                 )
             }
+            LoudnessNoticeArea(
+                notice = loudnessNotice,
+                controlsVisible = controlsVisibilityState.controlsVisible,
+            )
             Spacer(modifier = Modifier.weight(weight = 1f))
             AnimatedVisibility(
                 visible =
@@ -130,6 +150,41 @@ fun PlayerControls(
             controlsVisibilityState.controlsVisible -> ControlsMiddleView(
                 player = player,
                 modifier = middleControlsModifier,
+            )
+        }
+    }
+}
+
+/**
+ * Shows the two-pass analysis below the top controls while they are visible. The switch to two pass
+ * is announced even with hidden controls, since it rarely happens while someone is looking at them.
+ */
+@Composable
+private fun ColumnScope.LoudnessNoticeArea(notice: LoudnessNotice?, controlsVisible: Boolean) {
+    AnimatedContent(
+        targetState = notice?.takeIf {
+            controlsVisible || it == LoudnessNotice.SwitchedToTwoPass
+        },
+        modifier = Modifier.align(Alignment.CenterHorizontally),
+        transitionSpec = { fadeIn() togetherWith fadeOut() },
+        // Progress updates replace the text in place instead of fading the whole chip.
+        contentKey = { it?.let { visibleNotice -> visibleNotice::class } },
+        label = "LoudnessNotice",
+    ) { visibleNotice ->
+        if (visibleNotice != null) {
+            LoudnessNoticeChip(
+                notice = visibleNotice,
+                modifier = Modifier
+                    .thenIf(condition = !controlsVisible) {
+                        windowInsetsPadding(
+                            WindowInsets.systemBars.union(WindowInsets.displayCutout)
+                                .only(WindowInsetsSides.Top),
+                        )
+                    }
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = 8.dp,
+                    ),
             )
         }
     }

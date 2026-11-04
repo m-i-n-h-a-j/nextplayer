@@ -7,8 +7,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.media3.common.Player
 import androidx.media3.extractor.metadata.Chapter
+import dev.anilbeesetti.nextplayer.core.model.LoudnessNormalizationMode
 import dev.anilbeesetti.nextplayer.core.model.VideoContentScale
 import dev.anilbeesetti.nextplayer.feature.player.extensions.noRippleClickable
+import dev.anilbeesetti.nextplayer.feature.player.model.LoudnessAnalysis
 import dev.anilbeesetti.nextplayer.feature.player.state.SubtitleOptionsEvent
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
 
@@ -28,7 +30,10 @@ fun BoxScope.OverlayShowView(
     onSelectSubtitleClick: () -> Unit = {},
     onSelectAudioClick: () -> Unit = {},
     loudnessNormalizationEnabled: Boolean = false,
+    loudnessNormalizationMode: LoudnessNormalizationMode = LoudnessNormalizationMode.TWO_PASS,
+    loudnessAnalysis: LoudnessAnalysis = LoudnessAnalysis(),
     onToggleLoudnessNormalization: () -> Unit = {},
+    onLoudnessNormalizationModeSelected: (LoudnessNormalizationMode) -> Unit = {},
     onSubtitleOptionEvent: (SubtitleOptionsEvent) -> Unit = {},
     onVideoContentScaleChanged: (VideoContentScale) -> Unit = {},
 ) {
@@ -49,7 +54,10 @@ fun BoxScope.OverlayShowView(
         player = player,
         onSelectAudioClick = onSelectAudioClick,
         loudnessNormalizationEnabled = loudnessNormalizationEnabled,
+        loudnessNormalizationMode = loudnessNormalizationMode,
+        loudnessAnalysis = loudnessAnalysis,
         onToggleLoudnessNormalization = onToggleLoudnessNormalization,
+        onLoudnessNormalizationModeSelected = onLoudnessNormalizationModeSelected,
         onDismiss = onDismiss,
     )
 

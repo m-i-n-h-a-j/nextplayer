@@ -42,6 +42,7 @@ import dev.anilbeesetti.nextplayer.feature.player.service.PlayerService
 import dev.anilbeesetti.nextplayer.feature.player.service.addAudioTrack
 import dev.anilbeesetti.nextplayer.feature.player.service.addSubtitleTrack
 import dev.anilbeesetti.nextplayer.feature.player.service.decoderServiceState
+import dev.anilbeesetti.nextplayer.feature.player.service.loudnessAnalysis
 import dev.anilbeesetti.nextplayer.feature.player.service.retainPlaybackUriPermissions
 import dev.anilbeesetti.nextplayer.feature.player.service.setAudioDecoderMode
 import dev.anilbeesetti.nextplayer.feature.player.service.setVideoDecoderMode
@@ -199,6 +200,9 @@ class PlayerActivity : ComponentActivity() {
                     viewModel.onAction(
                         PlayerAction.UpdateDecoderServiceState(extras.decoderServiceState()),
                     )
+                    viewModel.onAction(
+                        PlayerAction.UpdateLoudnessAnalysis(extras.loudnessAnalysis()),
+                    )
                 },
             )
             LaunchedEffect(key1 = player) {
@@ -208,6 +212,9 @@ class PlayerActivity : ComponentActivity() {
                     PlayerAction.UpdateDecoderServiceState(
                         player.sessionExtras.decoderServiceState(),
                     ),
+                )
+                viewModel.onAction(
+                    PlayerAction.UpdateLoudnessAnalysis(player.sessionExtras.loudnessAnalysis()),
                 )
                 if (!playerApi.launchInBackground) player.addListener(playbackStateListener)
                 updateKeepScreenOnFlag()

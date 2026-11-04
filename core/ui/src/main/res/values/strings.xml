@@ -214,6 +214,14 @@
     <string name="loudness_two_pass_desc">Measures the whole track first for the most even volume. Uses single pass until the measurement is done.</string>
     <string name="loudness_single_pass">Single pass</string>
     <string name="loudness_single_pass_desc">Adjusts the volume as the track plays. Starts right away and also works for network streams.</string>
+    <string name="loudness_status_single_pass">Adjusting the volume as the track plays</string>
+    <string name="loudness_status_analyzing">Analyzing loudness…</string>
+    <string name="loudness_status_analyzing_progress">Analyzing loudness… %1$d%%</string>
+    <string name="loudness_status_analyzing_fallback">Using single pass until the analysis is done, then switching to two pass</string>
+    <string name="loudness_status_two_pass">Two pass active. Track measured at %1$.1f LUFS.</string>
+    <string name="loudness_status_switched_to_two_pass">Analysis done. Switched to two pass.</string>
+    <string name="loudness_status_stream">Network streams can’t be analyzed. Using single pass.</string>
+    <string name="loudness_status_failed">Couldn’t analyze this track. Using single pass.</string>
     <string name="loudness_target">Target loudness</string>
     <string name="loudness_target_value">%1$d LUFS (closer to 0 is louder)</string>
     <string name="loudness_range">Loudness range</string>

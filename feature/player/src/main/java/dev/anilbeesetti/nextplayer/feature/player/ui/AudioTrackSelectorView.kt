@@ -26,10 +26,12 @@ import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import dev.anilbeesetti.nextplayer.core.common.extensions.getFilenameFromUri
+import dev.anilbeesetti.nextplayer.core.model.LoudnessNormalizationMode
 import dev.anilbeesetti.nextplayer.core.ui.R
 import dev.anilbeesetti.nextplayer.feature.player.extensions.externalAudio
 import dev.anilbeesetti.nextplayer.feature.player.extensions.externalAudioIndex
 import dev.anilbeesetti.nextplayer.feature.player.extensions.getName
+import dev.anilbeesetti.nextplayer.feature.player.model.LoudnessAnalysis
 import dev.anilbeesetti.nextplayer.feature.player.state.rememberTracksState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -42,7 +44,10 @@ fun BoxScope.AudioTrackSelectorView(
     player: Player,
     onSelectAudioClick: () -> Unit,
     loudnessNormalizationEnabled: Boolean,
+    loudnessNormalizationMode: LoudnessNormalizationMode,
+    loudnessAnalysis: LoudnessAnalysis,
     onToggleLoudnessNormalization: () -> Unit,
+    onLoudnessNormalizationModeSelected: (LoudnessNormalizationMode) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val audioTracksState = rememberTracksState(
@@ -109,6 +114,13 @@ fun BoxScope.AudioTrackSelectorView(
                 checked = loudnessNormalizationEnabled,
                 onCheckedChange = { onToggleLoudnessNormalization() },
             )
+            if (loudnessNormalizationEnabled) {
+                LoudnessModeSettings(
+                    mode = loudnessNormalizationMode,
+                    analysis = loudnessAnalysis,
+                    onModeSelected = onLoudnessNormalizationModeSelected,
+                )
+            }
         }
     }
 }

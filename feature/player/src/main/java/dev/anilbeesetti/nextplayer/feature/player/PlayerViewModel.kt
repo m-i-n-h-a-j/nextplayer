@@ -7,11 +7,13 @@ import dev.anilbeesetti.nextplayer.core.data.repository.MediaRepository
 import dev.anilbeesetti.nextplayer.core.data.repository.PreferencesRepository
 import dev.anilbeesetti.nextplayer.core.domain.GetSortedPlaylistUseCase
 import dev.anilbeesetti.nextplayer.core.model.LoopMode
+import dev.anilbeesetti.nextplayer.core.model.LoudnessNormalizationMode
 import dev.anilbeesetti.nextplayer.core.model.PlayerPreferences
 import dev.anilbeesetti.nextplayer.core.model.Video
 import dev.anilbeesetti.nextplayer.core.model.VideoContentScale
 import dev.anilbeesetti.nextplayer.core.ui.base.MviViewModel
 import dev.anilbeesetti.nextplayer.feature.player.model.DecoderServiceState
+import dev.anilbeesetti.nextplayer.feature.player.model.LoudnessAnalysis
 import dev.anilbeesetti.nextplayer.feature.player.state.SubtitleOptionsEvent
 import dev.anilbeesetti.nextplayer.feature.player.state.VideoZoomEvent
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
@@ -76,6 +78,10 @@ class PlayerViewModel(
                 it.copy(decoderServiceState = action.state)
             }
 
+            is PlayerAction.UpdateLoudnessAnalysis -> stateInternal.update {
+                it.copy(loudnessAnalysis = action.analysis)
+            }
+
             is PlayerAction.UpdatePlayWhenReady -> stateInternal.update {
                 it.copy(playWhenReady = action.playWhenReady)
             }
@@ -87,6 +93,9 @@ class PlayerViewModel(
             is PlayerAction.ToggleTimeDisplay -> toggleTimeDisplay()
 
             is PlayerAction.ToggleLoudnessNormalization -> toggleLoudnessNormalization()
+
+            is PlayerAction.SetLoudnessNormalizationMode ->
+                setLoudnessNormalizationMode(action.mode)
 
             is PlayerAction.OnVideoZoomEvent -> onVideoZoomEvent(action.event)
 
@@ -137,6 +146,14 @@ class PlayerViewModel(
         viewModelScope.launch {
             preferencesRepository.updatePlayerPreferences {
                 it.copy(enableLoudnessNormalization = !it.enableLoudnessNormalization)
+            }
+        }
+    }
+
+    private fun setLoudnessNormalizationMode(mode: LoudnessNormalizationMode) {
+        viewModelScope.launch {
+            preferencesRepository.updatePlayerPreferences {
+                it.copy(loudnessNormalizationMode = mode)
             }
         }
     }
@@ -198,6 +215,7 @@ data class PlayerUiState(
     val playerPreferences: PlayerPreferences = PlayerPreferences(),
     val playWhenReady: Boolean = true,
     val decoderServiceState: DecoderServiceState = DecoderServiceState(),
+    val loudnessAnalysis: LoudnessAnalysis = LoudnessAnalysis(),
 )
 
 sealed interface PlayerAction {
@@ -209,11 +227,13 @@ sealed interface PlayerAction {
     data class SetAudioDecoderMode(val mode: DecoderMode) : PlayerAction
     data object TryDecoderFallback : PlayerAction
     data class UpdateDecoderServiceState(val state: DecoderServiceState) : PlayerAction
+    data class UpdateLoudnessAnalysis(val analysis: LoudnessAnalysis) : PlayerAction
     data class UpdatePlayWhenReady(val playWhenReady: Boolean) : PlayerAction
     data class UpdatePlayerBrightness(val value: Float) : PlayerAction
     data class SetLoopMode(val loopMode: LoopMode) : PlayerAction
     data object ToggleTimeDisplay : PlayerAction
     data object ToggleLoudnessNormalization : PlayerAction
+    data class SetLoudnessNormalizationMode(val mode: LoudnessNormalizationMode) : PlayerAction
     data class OnVideoZoomEvent(val event: VideoZoomEvent) : PlayerAction
     data class OnSubtitleOptionEvent(val event: SubtitleOptionsEvent) : PlayerAction
 }
