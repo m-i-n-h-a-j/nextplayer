@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -23,6 +24,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.anilbeesetti.nextplayer.core.model.LoudnessNormalizationMode
 import dev.anilbeesetti.nextplayer.core.model.PlayerPreferences
 import dev.anilbeesetti.nextplayer.core.ui.R
 import dev.anilbeesetti.nextplayer.core.ui.components.ClickablePreferenceItem
@@ -31,6 +33,7 @@ import dev.anilbeesetti.nextplayer.core.ui.components.NextTopAppBar
 import dev.anilbeesetti.nextplayer.core.ui.components.PreferenceSlider
 import dev.anilbeesetti.nextplayer.core.ui.components.PreferenceSwitch
 import dev.anilbeesetti.nextplayer.core.ui.components.RadioTextButton
+import dev.anilbeesetti.nextplayer.core.ui.components.SingleSelectablePreference
 import dev.anilbeesetti.nextplayer.core.ui.components.rememberTvListFocusRequester
 import dev.anilbeesetti.nextplayer.core.ui.components.tvFocusDown
 import dev.anilbeesetti.nextplayer.core.ui.components.tvListFocus
@@ -165,6 +168,21 @@ private fun AudioPreferencesScreenContent(
                     onClick = { onAction(AudioPreferencesUiEvent.ToggleLoudnessNormalization) },
                     isFirstItem = true,
                 )
+                Column(
+                    modifier = Modifier.selectableGroup(),
+                    verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+                ) {
+                    LoudnessModeOption(
+                        mode = LoudnessNormalizationMode.TWO_PASS,
+                        selectedMode = state.preferences.loudnessNormalizationMode,
+                        onAction = onAction,
+                    )
+                    LoudnessModeOption(
+                        mode = LoudnessNormalizationMode.SINGLE_PASS,
+                        selectedMode = state.preferences.loudnessNormalizationMode,
+                        onAction = onAction,
+                    )
+                }
                 LoudnessSlider(
                     title = stringResource(id = R.string.loudness_target),
                     description = stringResource(
@@ -237,6 +255,30 @@ private fun AudioPreferencesScreenContent(
             }
         }
     }
+}
+
+@Composable
+private fun LoudnessModeOption(
+    mode: LoudnessNormalizationMode,
+    selectedMode: LoudnessNormalizationMode,
+    onAction: (AudioPreferencesUiEvent) -> Unit,
+) {
+    SingleSelectablePreference(
+        title = stringResource(
+            id = when (mode) {
+                LoudnessNormalizationMode.TWO_PASS -> R.string.loudness_two_pass
+                LoudnessNormalizationMode.SINGLE_PASS -> R.string.loudness_single_pass
+            },
+        ),
+        description = stringResource(
+            id = when (mode) {
+                LoudnessNormalizationMode.TWO_PASS -> R.string.loudness_two_pass_desc
+                LoudnessNormalizationMode.SINGLE_PASS -> R.string.loudness_single_pass_desc
+            },
+        ),
+        selected = mode == selectedMode,
+        onClick = { onAction(AudioPreferencesUiEvent.UpdateLoudnessNormalizationMode(mode)) },
+    )
 }
 
 @Composable

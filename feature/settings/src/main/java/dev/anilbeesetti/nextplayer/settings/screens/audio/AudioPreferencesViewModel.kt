@@ -3,6 +3,7 @@ package dev.anilbeesetti.nextplayer.settings.screens.audio
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.viewModelScope
 import dev.anilbeesetti.nextplayer.core.data.repository.PreferencesRepository
+import dev.anilbeesetti.nextplayer.core.model.LoudnessNormalizationMode
 import dev.anilbeesetti.nextplayer.core.model.PlayerPreferences
 import dev.anilbeesetti.nextplayer.core.ui.base.MviViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -56,6 +57,9 @@ class AudioPreferencesViewModel(
             is AudioPreferencesUiEvent.ToggleVolumeBoost -> toggleVolumeBoost()
 
             is AudioPreferencesUiEvent.ToggleLoudnessNormalization -> toggleLoudnessNormalization()
+
+            is AudioPreferencesUiEvent.UpdateLoudnessNormalizationMode ->
+                updateLoudnessNormalizationMode(action.value)
 
             is AudioPreferencesUiEvent.UpdateLoudnessTarget -> updateLoudnessTarget(action.value)
 
@@ -118,6 +122,14 @@ class AudioPreferencesViewModel(
         }
     }
 
+    private fun updateLoudnessNormalizationMode(value: LoudnessNormalizationMode) {
+        viewModelScope.launch {
+            preferencesRepository.updatePlayerPreferences {
+                it.copy(loudnessNormalizationMode = value)
+            }
+        }
+    }
+
     private fun updateLoudnessTarget(value: Float) {
         viewModelScope.launch {
             preferencesRepository.updatePlayerPreferences { it.copy(loudnessTargetLufs = value) }
@@ -157,6 +169,8 @@ sealed interface AudioPreferencesUiEvent {
     data object ToggleRequireAudioFocus : AudioPreferencesUiEvent
     data object ToggleVolumeBoost : AudioPreferencesUiEvent
     data object ToggleLoudnessNormalization : AudioPreferencesUiEvent
+    data class UpdateLoudnessNormalizationMode(val value: LoudnessNormalizationMode) :
+        AudioPreferencesUiEvent
     data class UpdateLoudnessTarget(val value: Float) : AudioPreferencesUiEvent
     data class UpdateLoudnessRange(val value: Float) : AudioPreferencesUiEvent
     data class UpdateLoudnessPeakLimit(val value: Float) : AudioPreferencesUiEvent

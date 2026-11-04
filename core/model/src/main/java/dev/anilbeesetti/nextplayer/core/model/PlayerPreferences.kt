@@ -51,6 +51,7 @@ data class PlayerPreferences(
     val showSystemVolumePanel: Boolean = true,
     val enableVolumeBoost: Boolean = false,
     val enableLoudnessNormalization: Boolean = false,
+    val loudnessNormalizationMode: LoudnessNormalizationMode = LoudnessNormalizationMode.TWO_PASS,
     val loudnessTargetLufs: Float = DEFAULT_LOUDNESS_TARGET_LUFS,
     val loudnessRangeLu: Float = DEFAULT_LOUDNESS_RANGE_LU,
     val loudnessPeakLimitDb: Float = DEFAULT_LOUDNESS_PEAK_LIMIT_DB,
