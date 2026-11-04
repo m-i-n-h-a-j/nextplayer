@@ -26,7 +26,10 @@ internal class PeakLimiter(sampleRate: Int, private val lookaheadFrames: Int) {
         heldGain = if (lowestGain < heldGain) {
             lowestGain
         } else {
-            heldGain + (lowestGain - heldGain) * releasePerFrame
+            val released = heldGain + (lowestGain - heldGain) * releasePerFrame
+            // In float, the release stalls a hair short of its goal once a step is too small to
+            // change the gain, which would leave the audio slightly quieter for good.
+            if (released == heldGain) lowestGain else released
         }
 
         fadeSum += heldGain - fadeFrames[fadePosition]

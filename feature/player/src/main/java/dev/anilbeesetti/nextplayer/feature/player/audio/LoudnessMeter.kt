@@ -81,7 +81,10 @@ internal class LoudnessMeter(
         filledBlocks = (filledBlocks + 1).coerceAtMost(SHORT_TERM_BLOCKS)
         if (filledBlocks < MIN_BLOCKS) return
 
-        val shortTermEnergy = blockEnergies.take(filledBlocks).average()
+        // A loop instead of take().average(), so the audio thread allocates nothing per block.
+        var energySum = 0.0
+        for (block in 0 until filledBlocks) energySum += blockEnergies[block]
+        val shortTermEnergy = energySum / filledBlocks
         shortTermLufs = energyToLufs(energy = shortTermEnergy)
         programBlocks = (programBlocks + 1).coerceAtMost(programMemoryBlocks)
         programEnergy += (shortTermEnergy - programEnergy) / programBlocks

@@ -5,11 +5,14 @@ import kotlin.math.max
 import kotlin.math.pow
 
 /**
- * Single-pass loudness normalization of interleaved audio.
+ * Loudness normalization of interleaved audio.
  *
  * The gain follows FFmpeg's dynamic `loudnorm` mode: short-term loudness is moved to the target,
  * while up to half of the loudness range around the program level is preserved. A limiter then
  * catches peaks that the slow gain cannot react to.
+ *
+ * In single pass the program level is estimated while playing. Two pass replaces the estimate
+ * with [LoudnessSettings.measuredProgramLufs] once the first pass has measured the whole track.
  */
 internal class LoudnessNormalizer(sampleRate: Int, private val channelCount: Int) {
     private val meter = LoudnessMeter(
@@ -30,15 +33,17 @@ internal class LoudnessNormalizer(sampleRate: Int, private val channelCount: Int
 
     private var targetGainDb = 0.0
     private var blockGainDb = 0.0
+
+    // The gain moves linearly from block to block and lands exactly on rampTarget, so a ramp
+    // cut short by a seek cannot overshoot, and a disabled normalizer returns to exactly 1.
     private var gain = 1f
     private var gainStep = 0f
+    private var rampTarget = 1f
+    private var rampFramesLeft = 0
 
     /** Normalizes [frameCount] frames of [samples] in place. */
     fun process(samples: FloatArray, frameCount: Int, settings: LoudnessSettings) {
-        val ceiling = when {
-            settings.enabled -> dbToLinear(settings.peakLimitDb.toDouble())
-            else -> NO_CEILING
-        }
+        val peakLimit = dbToLinear(settings.peakLimitDb.toDouble())
         for (frame in 0 until frameCount) {
             val offset = frame * channelCount
             if (meter.addFrame(
@@ -48,7 +53,7 @@ internal class LoudnessNormalizer(sampleRate: Int, private val channelCount: Int
             ) {
                 updateGain(settings = settings)
             }
-            gain += gainStep
+            advanceGain()
             val peak = amplifyPeak(
                 samples = samples,
                 offset = offset,
@@ -58,7 +63,10 @@ internal class LoudnessNormalizer(sampleRate: Int, private val channelCount: Int
                 offset = offset,
                 limiterGain = limiter.nextGain(
                     peak = peak,
-                    ceiling = ceiling,
+                    ceiling = ceiling(
+                        enabled = settings.enabled,
+                        peakLimit = peakLimit,
+                    ),
                 ),
             )
         }
@@ -66,6 +74,7 @@ internal class LoudnessNormalizer(sampleRate: Int, private val channelCount: Int
 
     /** Drops audio held for playback after a seek. The gain stays, so the level does not jump. */
     fun clearCurrentAudio() {
+        finishRamp()
         meter.clearCurrentAudio()
         limiter.reset()
         delayLine.fill(0f)
@@ -86,15 +95,39 @@ internal class LoudnessNormalizer(sampleRate: Int, private val channelCount: Int
                     -settings.loudnessRangeLu / 2.0,
                     settings.loudnessRangeLu / 2.0,
                 )
-                (settings.targetLufs + keptRange - shortTerm).coerceIn(
-                    -MAX_GAIN_DB,
-                    MAX_GAIN_DB,
-                )
+                settings.targetLufs + keptRange - shortTerm
             }
-        }
+        }.coerceIn(
+            -MAX_GAIN_DB,
+            MAX_GAIN_DB,
+        )
         val smoothing = if (targetGainDb < blockGainDb) GAIN_DOWN_SMOOTHING else GAIN_UP_SMOOTHING
         blockGainDb += (targetGainDb - blockGainDb) * smoothing
-        gainStep = (dbToLinear(blockGainDb) - gain) / framesPerBlock
+        if (!settings.enabled && abs(blockGainDb) < UNITY_SNAP_DB) blockGainDb = 0.0
+
+        rampTarget = dbToLinear(blockGainDb)
+        rampFramesLeft = framesPerBlock
+        gainStep = (rampTarget - gain) / framesPerBlock
+    }
+
+    private fun advanceGain() {
+        if (rampFramesLeft == 0) return
+        gain = if (--rampFramesLeft == 0) rampTarget else gain + gainStep
+    }
+
+    private fun finishRamp() {
+        gain = rampTarget
+        rampFramesLeft = 0
+    }
+
+    /**
+     * The limiter only works while enabled, except that fading back to unity after being disabled
+     * can still push peaks past full scale, which would clip.
+     */
+    private fun ceiling(enabled: Boolean, peakLimit: Float): Float = when {
+        enabled -> peakLimit
+        gain > 1f || rampTarget > 1f -> FULL_SCALE
+        else -> NO_CEILING
     }
 
     private fun amplifyPeak(samples: FloatArray, offset: Int): Float {
@@ -126,7 +159,11 @@ internal class LoudnessNormalizer(sampleRate: Int, private val channelCount: Int
         const val BLOCKS_PER_SECOND = 10
         const val LIMITER_LOOKAHEAD_MILLIS = 5
         const val MAX_GAIN_DB = 24.0
+        const val FULL_SCALE = 1f
         const val NO_CEILING = Float.MAX_VALUE
+
+        // Below this, a disabled normalizer is at unity and passes audio through unchanged.
+        const val UNITY_SNAP_DB = 0.05
 
         // Share of the remaining gain change applied per 100 ms block. Turning down faster than
         // up keeps sudden loud scenes under control without audible pumping in quiet ones.

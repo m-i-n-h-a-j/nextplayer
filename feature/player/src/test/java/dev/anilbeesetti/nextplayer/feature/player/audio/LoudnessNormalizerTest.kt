@@ -165,6 +165,111 @@ class LoudnessNormalizerTest {
         )
     }
 
+    @Test
+    fun measuredLoudnessFarBelowTargetIsLimitedToMaxGain() {
+        val normalizer = LoudnessNormalizer(
+            sampleRate = SAMPLE_RATE,
+            channelCount = CHANNELS,
+        )
+        val measured = settings.copy(measuredProgramLufs = -70.0)
+        // Nothing here passes the absolute gate, so the gain comes from the measurement alone.
+        normalizer.processAll(
+            samples = FloatArray(SAMPLE_RATE * CHANNELS * 30),
+            settings = measured,
+        )
+        val output = sine(
+            levelDb = -75f,
+            seconds = 5,
+        )
+
+        normalizer.processAll(
+            samples = output,
+            settings = measured,
+        )
+
+        assertEquals(
+            -75.0 + 24.0,
+            rmsSineLevelDb(output.lastSecond()),
+            0.5,
+        )
+    }
+
+    @Test
+    fun disablingWhileRaisedDoesNotClipLoudAudio() {
+        val normalizer = LoudnessNormalizer(
+            sampleRate = SAMPLE_RATE,
+            channelCount = CHANNELS,
+        )
+        normalizer.processAll(
+            samples = sine(
+                levelDb = -35f,
+                seconds = 30,
+            ),
+            settings = settings,
+        )
+        val loud = sine(
+            levelDb = -3f,
+            seconds = 2,
+        )
+
+        normalizer.processAll(
+            samples = loud,
+            settings = LoudnessSettings(enabled = false),
+        )
+
+        assertTrue(loud.maxOf { abs(it) } <= 1f + 0.001f)
+    }
+
+    @Test
+    fun disablingFadesBackToUnchangedAudio() {
+        val normalizer = LoudnessNormalizer(
+            sampleRate = SAMPLE_RATE,
+            channelCount = CHANNELS,
+        )
+        normalizer.processAll(
+            samples = sine(
+                levelDb = -35f,
+                seconds = 30,
+            ),
+            settings = settings,
+        )
+        normalizer.processAll(
+            samples = sine(
+                levelDb = -35f,
+                seconds = 10,
+            ),
+            settings = LoudnessSettings(enabled = false),
+        )
+        val input = sine(
+            levelDb = -35f,
+            seconds = 1,
+        )
+        val output = input.copyOf()
+
+        normalizer.processAll(
+            samples = output,
+            settings = LoudnessSettings(enabled = false),
+        )
+
+        val delaySamples = normalizer.latencyFrames * CHANNELS
+        assertArrayEquals(
+            input.copyOf(input.size - delaySamples),
+            output.copyOfRange(
+                delaySamples,
+                output.size,
+            ),
+            0f,
+        )
+    }
+
+    private fun LoudnessNormalizer.processAll(samples: FloatArray, settings: LoudnessSettings) {
+        process(
+            samples = samples,
+            frameCount = samples.size / CHANNELS,
+            settings = settings,
+        )
+    }
+
     private fun normalize(input: FloatArray, settings: LoudnessSettings): FloatArray {
         val output = input.copyOf()
         LoudnessNormalizer(
