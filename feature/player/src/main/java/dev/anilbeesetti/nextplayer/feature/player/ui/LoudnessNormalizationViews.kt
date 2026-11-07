@@ -1,30 +1,32 @@
 package dev.anilbeesetti.nextplayer.feature.player.ui
 
+import android.graphics.Matrix
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SweepGradientShader
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.inset
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -32,121 +34,87 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.anilbeesetti.nextplayer.core.model.LoudnessNormalizationMode
 import dev.anilbeesetti.nextplayer.core.ui.R
-import dev.anilbeesetti.nextplayer.core.ui.designsystem.NextIcons
 import dev.anilbeesetti.nextplayer.feature.player.model.LoudnessAnalysis
 import dev.anilbeesetti.nextplayer.feature.player.model.LoudnessAnalysisStatus
 import kotlin.math.roundToInt
-import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.delay
-
-/** A short note about two-pass analysis, shown over the video next to the player controls. */
-sealed interface LoudnessNotice {
-    data class Analyzing(val progress: Float?) : LoudnessNotice
-
-    data object SwitchedToTwoPass : LoudnessNotice
-}
 
 /**
- * Returns the note to show for [analysis] in two pass: while the first pass runs, and for a few
- * seconds after it switched to two pass. A result read from the cache switches right away, so it
- * needs no note.
+ * Animates the light that circles the audio panel while the first pass runs, or returns null when
+ * there is nothing to show. Only runs while the panel is shown, as it draws every frame.
  */
 @Composable
-internal fun rememberLoudnessNotice(
-    analysis: LoudnessAnalysis,
-    isTwoPass: Boolean,
-): LoudnessNotice? {
-    var previousStatus by remember { mutableStateOf(analysis.status) }
-    var hasJustSwitched by remember { mutableStateOf(false) }
-    LaunchedEffect(analysis.status) {
-        hasJustSwitched = previousStatus == LoudnessAnalysisStatus.ANALYZING &&
-            analysis.status == LoudnessAnalysisStatus.MEASURED
-        previousStatus = analysis.status
-        if (hasJustSwitched) {
-            delay(SWITCHED_NOTICE_DURATION)
-            hasJustSwitched = false
-        }
-    }
-    return when {
-        !isTwoPass -> null
-
-        analysis.status == LoudnessAnalysisStatus.ANALYZING -> LoudnessNotice.Analyzing(
-            analysis.progress,
-        )
-
-        hasJustSwitched -> LoudnessNotice.SwitchedToTwoPass
-
-        else -> null
-    }
+internal fun rememberAnalyzingOutlineAngle(isAnalyzing: Boolean): State<Float>? {
+    if (!isAnalyzing) return null
+    return rememberInfiniteTransition(label = "AnalyzingOutline").animateFloat(
+        initialValue = 0f,
+        targetValue = FULL_TURN_DEGREES,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = OUTLINE_LAP_MILLIS,
+                easing = LinearEasing,
+            ),
+        ),
+        label = "AnalyzingOutlineAngle",
+    )
 }
 
-@Composable
-internal fun LoudnessNoticeChip(notice: LoudnessNotice, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier.semantics { liveRegion = LiveRegionMode.Polite },
-        shape = RoundedCornerShape(16.dp),
-        color = Color.Black.copy(alpha = 0.6f),
-        contentColor = Color.White,
-    ) {
-        Row(
-            modifier = Modifier.padding(
-                horizontal = 16.dp,
-                vertical = 8.dp,
-            ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            when (notice) {
-                is LoudnessNotice.Analyzing -> {
-                    val progressModifier = Modifier.size(20.dp)
-                    if (notice.progress != null) {
-                        CircularProgressIndicator(
-                            progress = { notice.progress },
-                            modifier = progressModifier,
-                            color = Color.White,
-                            strokeWidth = 2.dp,
+/** Outlines [shape] with a light circling at [angle], a loading animation for the first pass. */
+internal fun Modifier.analyzingOutline(angle: State<Float>?, color: Color, shape: Shape): Modifier =
+    if (angle == null) {
+        this
+    } else {
+        drawWithContent {
+            drawContent()
+            val strokeWidth = OUTLINE_WIDTH.toPx()
+            inset(inset = strokeWidth / 2) {
+                val outline = shape.createOutline(
+                    size = size,
+                    layoutDirection = layoutDirection,
+                    density = this,
+                )
+                drawOutline(
+                    outline = outline,
+                    color = color.copy(alpha = OUTLINE_TRACK_ALPHA),
+                    style = Stroke(width = strokeWidth),
+                )
+                val light = SweepGradientShader(
+                    center = center,
+                    colors = listOf(
+                        Color.Transparent,
+                        color,
+                        Color.Transparent,
+                    ),
+                    colorStops = listOf(
+                        0f,
+                        OUTLINE_LIGHT_LENGTH / 2,
+                        OUTLINE_LIGHT_LENGTH,
+                    ),
+                )
+                // Reading the angle here only redraws the outline, without recomposing the panel.
+                light.setLocalMatrix(
+                    Matrix().apply {
+                        setRotate(
+                            angle.value,
+                            center.x,
+                            center.y,
                         )
-                    } else {
-                        CircularProgressIndicator(
-                            modifier = progressModifier,
-                            color = Color.White,
-                            strokeWidth = 2.dp,
-                        )
-                    }
-                    Column {
-                        Text(
-                            text = analyzingText(progress = notice.progress),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        Text(
-                            text = stringResource(R.string.loudness_status_analyzing_fallback),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.8f),
-                        )
-                    }
-                }
-
-                LoudnessNotice.SwitchedToTwoPass -> {
-                    Icon(
-                        imageVector = NextIcons.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Text(
-                        text = stringResource(R.string.loudness_status_switched_to_two_pass),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
+                    },
+                )
+                drawOutline(
+                    outline = outline,
+                    brush = ShaderBrush(light),
+                    style = Stroke(width = strokeWidth),
+                )
             }
         }
     }
-}
 
 /** Chooses between single and two pass, and tells what the chosen mode is doing right now. */
 @Composable
 internal fun LoudnessModeSettings(
     mode: LoudnessNormalizationMode,
     analysis: LoudnessAnalysis,
+    targetLufs: Float,
     onModeSelected: (LoudnessNormalizationMode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -175,12 +143,17 @@ internal fun LoudnessModeSettings(
         LoudnessStatus(
             mode = mode,
             analysis = analysis,
+            targetLufs = targetLufs,
         )
     }
 }
 
 @Composable
-private fun LoudnessStatus(mode: LoudnessNormalizationMode, analysis: LoudnessAnalysis) {
+private fun LoudnessStatus(
+    mode: LoudnessNormalizationMode,
+    analysis: LoudnessAnalysis,
+    targetLufs: Float,
+) {
     val statusColor = MaterialTheme.colorScheme.onSurfaceVariant
     val statusStyle = MaterialTheme.typography.bodyMedium
     Column(
@@ -222,9 +195,12 @@ private fun LoudnessStatus(mode: LoudnessNormalizationMode, analysis: LoudnessAn
             }
 
             LoudnessAnalysisStatus.MEASURED -> Text(
+                // The measurement does not depend on the settings, so a new target applies to it
+                // right away; showing both makes that visible.
                 text = stringResource(
                     R.string.loudness_status_two_pass,
                     analysis.programLufs ?: 0.0,
+                    targetLufs.roundToInt(),
                 ),
                 style = statusStyle,
                 color = statusColor,
@@ -261,4 +237,8 @@ private val LoudnessNormalizationMode.labelRes: Int
         LoudnessNormalizationMode.SINGLE_PASS -> R.string.loudness_single_pass
     }
 
-private val SWITCHED_NOTICE_DURATION = 4.seconds
+private const val FULL_TURN_DEGREES = 360f
+private const val OUTLINE_LAP_MILLIS = 1500
+private const val OUTLINE_LIGHT_LENGTH = 0.35f
+private const val OUTLINE_TRACK_ALPHA = 0.3f
+private val OUTLINE_WIDTH = 3.dp

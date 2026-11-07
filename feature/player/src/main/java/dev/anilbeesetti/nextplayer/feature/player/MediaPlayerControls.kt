@@ -28,7 +28,6 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.compose.state.rememberProgressStateWithTickInterval
 import dev.anilbeesetti.nextplayer.core.common.extensions.isTelevision
-import dev.anilbeesetti.nextplayer.core.model.LoudnessNormalizationMode
 import dev.anilbeesetti.nextplayer.core.ui.components.requestFocusUntilLanded
 import dev.anilbeesetti.nextplayer.core.ui.components.thenIf
 import dev.anilbeesetti.nextplayer.feature.player.state.ControlsVisibilityState
@@ -43,7 +42,6 @@ import dev.anilbeesetti.nextplayer.feature.player.ui.DpadSeekIndicator
 import dev.anilbeesetti.nextplayer.feature.player.ui.OverlayShowView
 import dev.anilbeesetti.nextplayer.feature.player.ui.OverlayView
 import dev.anilbeesetti.nextplayer.feature.player.ui.PlayerGestureIndicators
-import dev.anilbeesetti.nextplayer.feature.player.ui.rememberLoudnessNotice
 import kotlin.time.Duration.Companion.seconds
 
 /** Controls and overlays shared by live playback and the previewable content. */
@@ -75,11 +73,6 @@ internal fun MediaPlayerControls(
         controls = controlsVisibilityState,
         seekIncrementMs = playerPreferences.seekIncrement.seconds.inWholeMilliseconds,
         dpadUpDown = dpadUpDown,
-    )
-    val loudnessNotice = rememberLoudnessNotice(
-        analysis = state.loudnessAnalysis,
-        isTwoPass = playerPreferences.enableLoudnessNormalization &&
-            playerPreferences.loudnessNormalizationMode == LoudnessNormalizationMode.TWO_PASS,
     )
     var overlayView by remember { mutableStateOf<OverlayView?>(value = null) }
     LaunchedEffect(metadataState.mediaId) {
@@ -170,7 +163,6 @@ internal fun MediaPlayerControls(
                     title = metadataState.title.orEmpty(),
                     playerPreferences = playerPreferences,
                     videoDecoderMode = state.decoderServiceState.videoMode,
-                    loudnessNotice = loudnessNotice,
                     controlsVisibilityState = controlsVisibilityState,
                     seekGestureState = seekGestureState,
                     videoZoomAndContentScaleState = videoZoomAndContentScaleState,
@@ -216,6 +208,7 @@ internal fun MediaPlayerControls(
                 loudnessNormalizationEnabled = playerPreferences.enableLoudnessNormalization,
                 loudnessNormalizationMode = playerPreferences.loudnessNormalizationMode,
                 loudnessAnalysis = state.loudnessAnalysis,
+                loudnessTargetLufs = playerPreferences.loudnessTargetLufs,
                 onToggleLoudnessNormalization = {
                     onAction(PlayerAction.ToggleLoudnessNormalization)
                 },

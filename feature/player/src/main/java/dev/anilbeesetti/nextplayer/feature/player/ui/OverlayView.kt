@@ -84,7 +84,7 @@ fun BoxScope.OverlayView(
         },
     ) {
         Surface(
-            shape = RoundedCornerShape(16.dp),
+            shape = OverlayViewShape,
             modifier = modifier
                 .then(
                     other = if (configuration.isPortrait) {
@@ -116,6 +116,9 @@ fun BoxScope.OverlayView(
         }
     }
 }
+
+/** The panel's shape, for decorations that follow its outline. */
+internal val OverlayViewShape = RoundedCornerShape(16.dp)
 
 @Preview
 @Composable
