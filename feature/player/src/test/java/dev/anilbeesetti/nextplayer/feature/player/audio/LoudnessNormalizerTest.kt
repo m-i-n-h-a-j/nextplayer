@@ -137,6 +137,38 @@ class LoudnessNormalizerTest {
     }
 
     @Test
+    fun newTargetAppliesToTheMeasuredLoudnessWithoutMeasuringAgain() {
+        val normalizer = LoudnessNormalizer(
+            sampleRate = SAMPLE_RATE,
+            channelCount = CHANNELS,
+        )
+        val measured = settings.copy(measuredProgramLufs = -20.0)
+        normalizer.processAll(
+            samples = sine(
+                levelDb = -30f,
+                seconds = 60,
+            ),
+            settings = measured,
+        )
+        val output = sine(
+            levelDb = -30f,
+            seconds = 30,
+        )
+
+        // Only the settings change: the measurement of the track stays the same.
+        normalizer.processAll(
+            samples = output,
+            settings = measured.copy(targetLufs = -20f),
+        )
+
+        assertEquals(
+            -23.5,
+            rmsSineLevelDb(output.lastSecond()),
+            0.5,
+        )
+    }
+
+    @Test
     fun disabledSettingsOnlyDelayTheAudio() {
         val input = sine(
             levelDb = -35f,
