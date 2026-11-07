@@ -7,6 +7,7 @@ import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -104,7 +105,7 @@ class PlayerActivity : ComponentActivity() {
     private var mediaController by mutableStateOf<MediaController?>(null)
     private var playerApi by mutableStateOf(PlayerApi(Intent()))
     private var playbackRequestJob: Job? = null
-
+    private var pendingGrantItems: List<MediaItem> = emptyList()
     private val playbackStateListener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             intent.data = mediaItem?.localConfiguration?.uri
@@ -130,7 +131,25 @@ class PlayerActivity : ComponentActivity() {
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
-            if (playbackState == Player.STATE_READY) hasPlaybackStarted = true
+            if (playbackState == Player.STATE_READY) {
+                hasPlaybackStarted = true
+                if (pendingGrantItems.isNotEmpty()) {
+                    runCatching {
+                        retainPlaybackUriPermissions(
+                            intent,
+                            pendingGrantItems,
+                        )
+                    }
+                        .onSuccess { pendingGrantItems = emptyList() }
+                        .onFailure {
+                            Log.w(
+                                "PlayerActivity",
+                                "Unable to retain playback URI permissions",
+                                it,
+                            )
+                        }
+                }
+            }
             if (playbackState == Player.STATE_ENDED) {
                 isPlaybackFinished = mediaController?.playbackState == Player.STATE_ENDED
                 finishAndStopPlayerSession()
@@ -493,6 +512,8 @@ class PlayerActivity : ComponentActivity() {
     ) {
         val controller = mediaController ?: return
         if (!request.launchInBackground) {
+            // Wait until the service has accepted the queue before handing it the grants.
+            pendingGrantItems = items
             controller.setMediaItems(
                 items,
                 index,
