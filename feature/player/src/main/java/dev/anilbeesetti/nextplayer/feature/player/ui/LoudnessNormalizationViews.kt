@@ -39,8 +39,8 @@ import dev.anilbeesetti.nextplayer.feature.player.model.LoudnessAnalysisStatus
 import kotlin.math.roundToInt
 
 /**
- * Animates the light that circles the audio panel while the first pass runs, or returns null when
- * there is nothing to show. Only runs while the panel is shown, as it draws every frame.
+ * Animates the light that circles the audio button while the first pass runs, or returns null
+ * when there is nothing to show. It draws every frame, so it only runs while the button is shown.
  */
 @Composable
 internal fun rememberAnalyzingOutlineAngle(isAnalyzing: Boolean): State<Float>? {
@@ -241,4 +241,4 @@ private const val FULL_TURN_DEGREES = 360f
 private const val OUTLINE_LAP_MILLIS = 1500
 private const val OUTLINE_LIGHT_LENGTH = 0.35f
 private const val OUTLINE_TRACK_ALPHA = 0.3f
-private val OUTLINE_WIDTH = 3.dp
+private val OUTLINE_WIDTH = 2.dp

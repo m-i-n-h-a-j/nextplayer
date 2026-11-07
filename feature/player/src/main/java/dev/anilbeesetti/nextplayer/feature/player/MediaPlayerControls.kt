@@ -28,8 +28,10 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.compose.state.rememberProgressStateWithTickInterval
 import dev.anilbeesetti.nextplayer.core.common.extensions.isTelevision
+import dev.anilbeesetti.nextplayer.core.model.LoudnessNormalizationMode
 import dev.anilbeesetti.nextplayer.core.ui.components.requestFocusUntilLanded
 import dev.anilbeesetti.nextplayer.core.ui.components.thenIf
+import dev.anilbeesetti.nextplayer.feature.player.model.LoudnessAnalysisStatus
 import dev.anilbeesetti.nextplayer.feature.player.state.ControlsVisibilityState
 import dev.anilbeesetti.nextplayer.feature.player.state.SeekGestureState
 import dev.anilbeesetti.nextplayer.feature.player.state.TapGestureState
@@ -163,6 +165,10 @@ internal fun MediaPlayerControls(
                     title = metadataState.title.orEmpty(),
                     playerPreferences = playerPreferences,
                     videoDecoderMode = state.decoderServiceState.videoMode,
+                    isLoudnessAnalyzing = playerPreferences.enableLoudnessNormalization &&
+                        playerPreferences.loudnessNormalizationMode ==
+                        LoudnessNormalizationMode.TWO_PASS &&
+                        state.loudnessAnalysis.status == LoudnessAnalysisStatus.ANALYZING,
                     controlsVisibilityState = controlsVisibilityState,
                     seekGestureState = seekGestureState,
                     videoZoomAndContentScaleState = videoZoomAndContentScaleState,

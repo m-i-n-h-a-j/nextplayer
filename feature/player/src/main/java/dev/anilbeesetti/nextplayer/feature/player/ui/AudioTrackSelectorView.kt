@@ -11,7 +11,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,7 +32,6 @@ import dev.anilbeesetti.nextplayer.feature.player.extensions.externalAudio
 import dev.anilbeesetti.nextplayer.feature.player.extensions.externalAudioIndex
 import dev.anilbeesetti.nextplayer.feature.player.extensions.getName
 import dev.anilbeesetti.nextplayer.feature.player.model.LoudnessAnalysis
-import dev.anilbeesetti.nextplayer.feature.player.model.LoudnessAnalysisStatus
 import dev.anilbeesetti.nextplayer.feature.player.state.rememberTracksState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -68,18 +66,8 @@ fun BoxScope.AudioTrackSelectorView(
             withContext(Dispatchers.IO) { uris.map { context.getFilenameFromUri(uri = it) } }
     }
 
-    val outlineAngle = rememberAnalyzingOutlineAngle(
-        isAnalyzing = show && loudnessNormalizationEnabled &&
-            loudnessNormalizationMode == LoudnessNormalizationMode.TWO_PASS &&
-            loudnessAnalysis.status == LoudnessAnalysisStatus.ANALYZING,
-    )
-
     OverlayView(
-        modifier = modifier.analyzingOutline(
-            angle = outlineAngle,
-            color = MaterialTheme.colorScheme.primary,
-            shape = OverlayViewShape,
-        ),
+        modifier = modifier,
         show = show,
         title = stringResource(R.string.select_audio_track),
     ) {

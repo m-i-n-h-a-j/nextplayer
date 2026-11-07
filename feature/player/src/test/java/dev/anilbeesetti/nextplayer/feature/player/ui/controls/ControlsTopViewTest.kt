@@ -1,10 +1,16 @@
 package dev.anilbeesetti.nextplayer.feature.player.ui.controls
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -51,5 +57,30 @@ class ControlsTopViewTest {
         composeRule.runOnIdle { assertTrue(backClicked) }
         decoder.performKeyInput { pressKey(Key.DirectionRight) }
         decoder.assertIsFocused()
+    }
+
+    @Test
+    fun audioButtonTellsWhileLoudnessIsAnalyzed() {
+        var isAnalyzing by mutableStateOf(true)
+        composeRule.setContent {
+            NextPlayerTheme {
+                ControlsTopView(
+                    title = "Video",
+                    videoDecoderMode = null,
+                    isLoudnessAnalyzing = isAnalyzing,
+                )
+            }
+        }
+        val analyzingButtons = composeRule.onAllNodes(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                composeRule.activity.getString(R.string.loudness_status_analyzing),
+            ),
+        )
+        analyzingButtons.assertCountEquals(1)
+
+        isAnalyzing = false
+
+        analyzingButtons.assertCountEquals(0)
     }
 }

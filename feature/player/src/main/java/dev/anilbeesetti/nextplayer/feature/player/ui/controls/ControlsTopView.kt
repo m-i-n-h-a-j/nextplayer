@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -26,6 +27,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -36,6 +38,8 @@ import dev.anilbeesetti.nextplayer.core.ui.extensions.copy
 import dev.anilbeesetti.nextplayer.core.ui.theme.NextPlayerTheme
 import dev.anilbeesetti.nextplayer.feature.player.buttons.PlayerButton
 import dev.anilbeesetti.nextplayer.feature.player.model.labelRes
+import dev.anilbeesetti.nextplayer.feature.player.ui.analyzingOutline
+import dev.anilbeesetti.nextplayer.feature.player.ui.rememberAnalyzingOutlineAngle
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.DecoderMode
 
 @OptIn(UnstableApi::class)
@@ -47,6 +51,7 @@ fun ControlsTopView(
     onBackClick: () -> Unit = {},
     onDecoderClick: () -> Unit = {},
     onAudioClick: () -> Unit = {},
+    isLoudnessAnalyzing: Boolean = false,
     onSubtitleClick: () -> Unit = {},
     onPlaylistClick: () -> Unit = {},
 ) {
@@ -105,7 +110,21 @@ fun ControlsTopView(
                     contentDescription = null,
                 )
             }
-            PlayerButton(onClick = onAudioClick) {
+            // While two pass measures the track, a light circles the audio button, where the
+            // analysis status is shown.
+            val analyzingDescription = stringResource(R.string.loudness_status_analyzing)
+            PlayerButton(
+                modifier = Modifier
+                    .analyzingOutline(
+                        angle = rememberAnalyzingOutlineAngle(isAnalyzing = isLoudnessAnalyzing),
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = CircleShape,
+                    )
+                    .semantics {
+                        if (isLoudnessAnalyzing) stateDescription = analyzingDescription
+                    },
+                onClick = onAudioClick,
+            ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_audio_track),
                     contentDescription = null,
