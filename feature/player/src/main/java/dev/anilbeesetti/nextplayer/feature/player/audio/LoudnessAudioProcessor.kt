@@ -21,9 +21,20 @@ class LoudnessAudioProcessor : BaseAudioProcessor() {
     @Volatile
     var settings = LoudnessSettings()
 
+    @Volatile
+    private var isNewTrackPending = false
+
     private var normalizer: LoudnessNormalizer? = null
     private var normalizerFormat = AudioFormat.NOT_SET
     private var samples = FloatArray(0)
+
+    /**
+     * Tells the processor that the audio that follows belongs to a different track, so the level
+     * estimated for the previous one must not be applied to it. Callable from any thread.
+     */
+    fun startNewTrack() {
+        isNewTrackPending = true
+    }
 
     override fun onConfigure(inputAudioFormat: AudioFormat): AudioFormat =
         when (inputAudioFormat.encoding) {
@@ -35,6 +46,8 @@ class LoudnessAudioProcessor : BaseAudioProcessor() {
         val normalizer = normalizer ?: return
         val inputSize = inputBuffer.remaining()
         if (inputSize == 0) return
+        // Reached without a flush when the next track follows without a gap.
+        startPendingTrack()
 
         val frameCount = inputSize / inputAudioFormat.bytesPerFrame
         val sampleCount = frameCount * inputAudioFormat.channelCount
@@ -84,8 +97,16 @@ class LoudnessAudioProcessor : BaseAudioProcessor() {
                 channelCount = inputAudioFormat.channelCount,
             )
         } else {
+            // Before the audio is cleared, which lets the gain of a new track start at unity.
+            startPendingTrack()
             normalizer?.clearCurrentAudio()
         }
+    }
+
+    private fun startPendingTrack() {
+        if (!isNewTrackPending) return
+        isNewTrackPending = false
+        normalizer?.clearProgram()
     }
 
     private fun writeOutput(sampleCount: Int, size: Int) {

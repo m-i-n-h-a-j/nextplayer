@@ -244,6 +244,7 @@ class PlayerService : MediaSessionService() {
                 reason,
             )
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) return
+            loudnessAudioProcessor.startNewTrack()
             restoreDecoderChoices(mediaItem = mediaItem)
             isMediaItemReady = false
             loadArtworkForCurrentMediaItem()

@@ -97,6 +97,13 @@ internal class LoudnessMeter(sampleRate: Int, private val channelCount: Int) {
         shortTermLufs = Double.NEGATIVE_INFINITY
     }
 
+    /** Forgets the program estimate too, as a different track has a level of its own. */
+    fun clearProgram() {
+        clearCurrentAudio()
+        programEnergy = 0.0
+        programBlocks = 0
+    }
+
     /** Adds [frameCount] frames starting at [offset], which must fit in the current block. */
     private fun addToBlock(samples: FloatArray, offset: Int, frameCount: Int) {
         for (channel in 0 until channelCount) {

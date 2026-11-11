@@ -81,6 +81,17 @@ internal class LoudnessNormalizer(sampleRate: Int, private val channelCount: Int
         delayPosition = 0
     }
 
+    /**
+     * Starts over for a different track. Its level is unknown until it is measured, so the gain
+     * fades to unity instead of applying the level of the previous track to it.
+     */
+    fun clearProgram() {
+        meter.clearProgram()
+        targetGainDb = 0.0
+        blockGainDb = 0.0
+        startRamp()
+    }
+
     private fun updateGain(settings: LoudnessSettings) {
         meter.knownProgramLufs = settings.measuredProgramLufs
         val shortTerm = meter.shortTermLufs
@@ -104,7 +115,11 @@ internal class LoudnessNormalizer(sampleRate: Int, private val channelCount: Int
         val smoothing = if (targetGainDb < blockGainDb) GAIN_DOWN_SMOOTHING else GAIN_UP_SMOOTHING
         blockGainDb += (targetGainDb - blockGainDb) * smoothing
         if (!settings.enabled && abs(blockGainDb) < UNITY_SNAP_DB) blockGainDb = 0.0
+        startRamp()
+    }
 
+    /** Moves the gain to [blockGainDb] over the next block. */
+    private fun startRamp() {
         rampTarget = dbToLinear(blockGainDb)
         rampFramesLeft = framesPerBlock
         gainStep = (rampTarget - gain) / framesPerBlock

@@ -100,6 +100,75 @@ class LoudnessNormalizerTest {
     }
 
     @Test
+    fun quietTrackAfterLoudOneIsRaisedToTarget() {
+        val normalizer = LoudnessNormalizer(
+            sampleRate = SAMPLE_RATE,
+            channelCount = CHANNELS,
+        )
+        normalizer.processAll(
+            samples = sine(
+                levelDb = -3f,
+                seconds = 30,
+            ),
+            settings = settings,
+        )
+
+        // More than the pause gate below the first track, so it would be taken for a pause.
+        normalizer.clearProgram()
+        val quiet = sine(
+            levelDb = -35f,
+            seconds = 60,
+        )
+        normalizer.processAll(
+            samples = quiet,
+            settings = settings,
+        )
+
+        assertEquals(
+            -14.0,
+            rmsSineLevelDb(quiet.lastSecond()),
+            0.5,
+        )
+    }
+
+    @Test
+    fun newTrackStartsFromUnityGain() {
+        val normalizer = LoudnessNormalizer(
+            sampleRate = SAMPLE_RATE,
+            channelCount = CHANNELS,
+        )
+        normalizer.processAll(
+            samples = sine(
+                levelDb = -35f,
+                seconds = 30,
+            ),
+            settings = settings,
+        )
+
+        normalizer.clearProgram()
+        normalizer.clearCurrentAudio()
+        val loud = sine(
+            levelDb = -3f,
+            seconds = 1,
+        )
+        normalizer.processAll(
+            samples = loud,
+            settings = settings,
+        )
+
+        // The 21 dB of gain that the quiet track needed would have pushed this into the limiter.
+        val firstBlocks = loud.copyOfRange(
+            SAMPLE_RATE * CHANNELS / 10,
+            SAMPLE_RATE * CHANNELS * 4 / 10,
+        )
+        assertEquals(
+            -3.0,
+            rmsSineLevelDb(firstBlocks),
+            0.5,
+        )
+    }
+
+    @Test
     fun quietAudioIsRaisedToTarget() {
         val output = normalize(
             sine(

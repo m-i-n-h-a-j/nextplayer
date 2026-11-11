@@ -44,6 +44,32 @@ class LoudnessAudioProcessorTest {
         assertTrue(processor.peakOfNextBlock() > settledPeak * 0.8)
     }
 
+    @Test
+    fun newTrackDoesNotKeepTheGainOfThePreviousOne() {
+        val processor = LoudnessAudioProcessor()
+        processor.settings = LoudnessSettings(
+            enabled = true,
+            targetLufs = -14f,
+            loudnessRangeLu = 7f,
+            peakLimitDb = -1f,
+        )
+        processor.configure(format)
+        processor.flush(StreamMetadata.DEFAULT)
+        val settledPeak = (0 until 300).maxOf { block ->
+            val peak = processor.peakOfNextBlock()
+            if (block > 290) peak else 0
+        }
+
+        processor.startNewTrack()
+        processor.flush(StreamMetadata.DEFAULT)
+        processor.peakOfNextBlock()
+
+        // Back at the 300 of the input, before the new track has been measured.
+        val peak = processor.peakOfNextBlock()
+        assertTrue(settledPeak > 1000)
+        assertTrue(peak < 400)
+    }
+
     /** Sends 100 ms of a quiet 1 kHz sine and returns the output's highest sample. */
     private fun LoudnessAudioProcessor.peakOfNextBlock(): Int {
         val frames = 4800
