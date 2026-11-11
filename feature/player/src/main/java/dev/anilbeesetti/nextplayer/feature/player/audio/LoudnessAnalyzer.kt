@@ -350,8 +350,12 @@ private class LoudnessMeasuringAudioSink(sink: AudioSink) : ForwardingAudioSink(
     private var meter: LoudnessMeter? = null
     private var format: Format? = null
     private var samples = FloatArray(0)
+    private var shortSamples = ShortArray(0)
     private var positionUs = 0L
     private var isEnded = false
+
+    // Held in a property, so the playback thread allocates nothing per buffer.
+    private val addBlock: (Double) -> Unit = { loudness.addBlock(energy = it) }
 
     /** Duration of the audio measured so far, read on the main thread to report progress. */
     @Volatile
@@ -397,24 +401,18 @@ private class LoudnessMeasuringAudioSink(sink: AudioSink) : ForwardingAudioSink(
     ): Boolean {
         val format = format ?: return false
         val meter = meter ?: return false
-        val bytesPerSample = format.pcmEncoding.bytesPerSample()
-        val sampleCount = buffer.remaining() / bytesPerSample
+        val sampleCount = buffer.remaining() / format.pcmEncoding.bytesPerSample()
         if (samples.size < sampleCount) samples = FloatArray(sampleCount)
-
-        val input = buffer.order(ByteOrder.nativeOrder())
-        for (index in 0 until sampleCount) {
-            samples[index] = input.readSample(encoding = format.pcmEncoding)
-        }
+        buffer.order(ByteOrder.nativeOrder()).readSamples(
+            encoding = format.pcmEncoding,
+            count = sampleCount,
+        )
         val frameCount = sampleCount / format.channelCount
-        for (frame in 0 until frameCount) {
-            if (meter.addFrame(
-                    samples = samples,
-                    offset = frame * format.channelCount,
-                )
-            ) {
-                loudness.addBlock(energy = meter.lastBlockEnergy)
-            }
-        }
+        meter.addFrames(
+            samples = samples,
+            frameCount = frameCount,
+            onBlock = addBlock,
+        )
         measuredUs += frameCount * C.MICROS_PER_SECOND / format.sampleRate
         positionUs = presentationTimeUs
         return true
@@ -453,19 +451,40 @@ private class LoudnessMeasuringAudioSink(sink: AudioSink) : ForwardingAudioSink(
         else -> 4
     }
 
-    private fun ByteBuffer.readSample(encoding: Int): Float = when (encoding) {
-        C.ENCODING_PCM_FLOAT -> getFloat()
+    /**
+     * Reads all [count] samples into [samples]. The usual encodings are copied in bulk, which is
+     * much faster than reading sample by sample.
+     */
+    private fun ByteBuffer.readSamples(encoding: Int, count: Int) {
+        when (encoding) {
+            C.ENCODING_PCM_FLOAT -> asFloatBuffer().get(
+                samples,
+                0,
+                count,
+            )
 
-        C.ENCODING_PCM_32BIT -> getInt() / PCM_32BIT_SCALE
+            C.ENCODING_PCM_16BIT -> {
+                if (shortSamples.size < count) shortSamples = ShortArray(count)
+                asShortBuffer().get(
+                    shortSamples,
+                    0,
+                    count,
+                )
+                for (index in 0 until count) samples[index] = shortSamples[index] / PCM_16BIT_SCALE
+            }
 
-        C.ENCODING_PCM_24BIT -> {
-            val low = get().toInt() and BYTE_MASK
-            val middle = get().toInt() and BYTE_MASK
-            val high = get().toInt()
-            ((high shl 16) or (middle shl 8) or low) / PCM_24BIT_SCALE
+            C.ENCODING_PCM_32BIT ->
+                for (index in 0 until count) samples[index] = getInt() / PCM_32BIT_SCALE
+
+            else -> for (index in 0 until count) {
+                val low = get().toInt() and BYTE_MASK
+                val middle = get().toInt() and BYTE_MASK
+                val high = get().toInt()
+                samples[index] = ((high shl 16) or (middle shl 8) or low) / PCM_24BIT_SCALE
+            }
         }
-
-        else -> getShort() / PCM_16BIT_SCALE
+        // The bulk copies read through a view, which leaves the position of the buffer behind.
+        position(limit())
     }
 
     private companion object {

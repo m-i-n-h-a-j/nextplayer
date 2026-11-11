@@ -44,6 +44,62 @@ class LoudnessNormalizerTest {
     }
 
     @Test
+    fun framesAddedInOneRunMeasureTheSameBlocksAsFrameByFrame() {
+        val channels = 6
+        val samples = FloatArray(SAMPLE_RATE * channels) { index ->
+            0.1f * (index % channels + 1) * sin(2 * PI * SINE_HERTZ * index / SAMPLE_RATE).toFloat()
+        }
+        val frameCount = samples.size / channels
+        val expected = mutableListOf<Double>()
+        val frameByFrame = LoudnessMeter(
+            sampleRate = SAMPLE_RATE,
+            channelCount = channels,
+        )
+        for (frame in 0 until frameCount) {
+            if (frameByFrame.addFrame(
+                    samples = samples,
+                    offset = frame * channels,
+                )
+            ) {
+                expected += frameByFrame.lastBlockEnergy
+            }
+        }
+
+        val actual = mutableListOf<Double>()
+        val inRuns = LoudnessMeter(
+            sampleRate = SAMPLE_RATE,
+            channelCount = channels,
+        )
+        // Buffers that do not line up with the 100 ms blocks.
+        val framesPerBuffer = 1000
+        for (start in 0 until frameCount step framesPerBuffer) {
+            inRuns.addFrames(
+                samples = samples.copyOfRange(
+                    start * channels,
+                    (start + framesPerBuffer) * channels,
+                ),
+                frameCount = framesPerBuffer,
+                onBlock = { actual += it },
+            )
+        }
+
+        assertEquals(
+            10,
+            actual.size,
+        )
+        assertArrayEquals(
+            expected.toDoubleArray(),
+            actual.toDoubleArray(),
+            1e-12,
+        )
+        assertEquals(
+            frameByFrame.shortTermLufs,
+            inRuns.shortTermLufs,
+            1e-9,
+        )
+    }
+
+    @Test
     fun quietAudioIsRaisedToTarget() {
         val output = normalize(
             sine(

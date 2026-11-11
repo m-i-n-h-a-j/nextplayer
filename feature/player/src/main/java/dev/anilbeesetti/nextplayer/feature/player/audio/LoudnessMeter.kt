@@ -2,6 +2,7 @@ package dev.anilbeesetti.nextplayer.feature.player.audio
 
 import kotlin.math.PI
 import kotlin.math.log10
+import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.tan
 
@@ -50,14 +51,40 @@ internal class LoudnessMeter(sampleRate: Int, private val channelCount: Int) {
 
     /** Adds the frame starting at [offset] and returns true if it completed a block. */
     fun addFrame(samples: FloatArray, offset: Int): Boolean {
-        for (channel in 0 until channelCount) {
-            val filtered = filters[channel].process(sample = samples[offset + channel].toDouble())
-            blockEnergy += channelWeights[channel] * filtered * filtered
-        }
-        if (++blockFrames < framesPerBlock) return false
+        addToBlock(
+            samples = samples,
+            offset = offset,
+            frameCount = 1,
+        )
+        if (blockFrames < framesPerBlock) return false
 
         finishBlock()
         return true
+    }
+
+    /**
+     * Adds the first [frameCount] frames of [samples], calling [onBlock] with the energy of every
+     * block they complete. Much faster than adding frame by frame, as each channel is filtered in
+     * one run.
+     */
+    fun addFrames(samples: FloatArray, frameCount: Int, onBlock: (Double) -> Unit) {
+        var frame = 0
+        while (frame < frameCount) {
+            val count = min(
+                frameCount - frame,
+                framesPerBlock - blockFrames,
+            )
+            addToBlock(
+                samples = samples,
+                offset = frame * channelCount,
+                frameCount = count,
+            )
+            frame += count
+            if (blockFrames == framesPerBlock) {
+                finishBlock()
+                onBlock(lastBlockEnergy)
+            }
+        }
     }
 
     /** Forgets the audio in progress after a seek, but keeps the program estimate. */
@@ -68,6 +95,22 @@ internal class LoudnessMeter(sampleRate: Int, private val channelCount: Int) {
         blockEnergy = 0.0
         blockFrames = 0
         shortTermLufs = Double.NEGATIVE_INFINITY
+    }
+
+    /** Adds [frameCount] frames starting at [offset], which must fit in the current block. */
+    private fun addToBlock(samples: FloatArray, offset: Int, frameCount: Int) {
+        for (channel in 0 until channelCount) {
+            val weight = channelWeights[channel]
+            // The LFE channel does not count, so there is no need to filter it.
+            if (weight == 0.0) continue
+            blockEnergy += weight * filters[channel].energyOf(
+                samples = samples,
+                start = offset + channel,
+                stride = channelCount,
+                count = frameCount,
+            )
+        }
+        blockFrames += frameCount
     }
 
     private fun finishBlock() {
@@ -132,12 +175,65 @@ private class KWeightingFilter(sampleRate: Int) {
     private val shelf = highShelf(sampleRate = sampleRate)
     private val highPass = highPass(sampleRate = sampleRate)
 
-    fun process(sample: Double): Double = highPass.process(sample = shelf.process(sample = sample))
+    private var shelfState1 = 0.0
+    private var shelfState2 = 0.0
+    private var highPassState1 = 0.0
+    private var highPassState2 = 0.0
+
+    /**
+     * Filters [count] samples that are [stride] apart from [start] and returns the sum of their
+     * squares. Coefficients and state are held in locals for the run, which is what makes
+     * filtering a whole run faster than one sample at a time.
+     */
+    fun energyOf(samples: FloatArray, start: Int, stride: Int, count: Int): Double {
+        val shelfB0 = shelf.b0
+        val shelfB1 = shelf.b1
+        val shelfB2 = shelf.b2
+        val shelfA1 = shelf.a1
+        val shelfA2 = shelf.a2
+        val highPassA1 = highPass.a1
+        val highPassA2 = highPass.a2
+        var shelf1 = shelfState1
+        var shelf2 = shelfState2
+        var highPass1 = highPassState1
+        var highPass2 = highPassState2
+        var energy = 0.0
+        var index = start
+        val end = start + count * stride
+        while (index < end) {
+            val sample = samples[index].toDouble()
+            val shelved = shelfB0 * sample + shelf1
+            shelf1 = shelfB1 * sample - shelfA1 * shelved + shelf2
+            shelf2 = shelfB2 * sample - shelfA2 * shelved
+            // The numerator of the high pass is always 1, -2, 1.
+            val filtered = shelved + highPass1
+            highPass1 = -2.0 * shelved - highPassA1 * filtered + highPass2
+            highPass2 = shelved - highPassA2 * filtered
+            energy += filtered * filtered
+            index += stride
+        }
+        shelfState1 = shelf1
+        shelfState2 = shelf2
+        highPassState1 = highPass1
+        highPassState2 = highPass2
+        return energy
+    }
 
     fun reset() {
-        shelf.reset()
-        highPass.reset()
+        shelfState1 = 0.0
+        shelfState2 = 0.0
+        highPassState1 = 0.0
+        highPassState2 = 0.0
     }
+
+    /** Coefficients of a biquad filter, normalized so that a0 is 1. */
+    private class Biquad(
+        val b0: Double,
+        val b1: Double,
+        val b2: Double,
+        val a1: Double,
+        val a2: Double,
+    )
 
     private companion object {
         const val SHELF_FREQUENCY = 1681.974450955533
@@ -172,28 +268,5 @@ private class KWeightingFilter(sampleRate: Int) {
                 a2 = (1.0 - k / HIGH_PASS_Q + k * k) / a0,
             )
         }
-    }
-}
-
-private class Biquad(
-    private val b0: Double,
-    private val b1: Double,
-    private val b2: Double,
-    private val a1: Double,
-    private val a2: Double,
-) {
-    private var state1 = 0.0
-    private var state2 = 0.0
-
-    fun process(sample: Double): Double {
-        val output = b0 * sample + state1
-        state1 = b1 * sample - a1 * output + state2
-        state2 = b2 * sample - a2 * output
-        return output
-    }
-
-    fun reset() {
-        state1 = 0.0
-        state2 = 0.0
     }
 }
