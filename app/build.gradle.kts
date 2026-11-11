@@ -18,6 +18,7 @@ android {
         versionCode = 77
         versionName = "0.20.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunnerArguments["clearPackageData"] = "true"
     }
 
     buildFeatures {
@@ -26,6 +27,7 @@ android {
     }
 
     testOptions {
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
         unitTests.isIncludeAndroidResources = true
     }
 
@@ -157,12 +159,14 @@ dependencies {
     androidTestImplementation(project(":core:domain"))
     androidTestImplementation(libs.androidx.datastore.core)
     androidTestImplementation(libs.androidx.media3.session)
+    androidTestImplementation(libs.androidx.media3.ui)
     androidTestImplementation(libs.github.anilbeesetti.nextlib.media3ext)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.test.ext)
     androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.okhttp.mockwebserver)
+    androidTestUtil(libs.androidx.test.orchestrator)
     androidTestImplementation(libs.androidx.compose.ui.test)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.testManifest)
